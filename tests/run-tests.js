@@ -1,8 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import JSZip from 'jszip';
-import { parseChat, computeStatistics, generateMarkdownSummary } from '../js/chatParser.js';
+import {
+  parseChat,
+  computeStatistics,
+  generateMarkdownSummary,
+  filterMessagesByDate
+} from '../js/chatParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,37 +25,52 @@ async function loadExample() {
   return chatEntry.async('string');
 }
 
-async function main() {
-  const rawText = await loadExample();
-  const messages = parseChat(rawText);
-  if (!messages.length) {
-    throw new Error('Parser failed to load messages from the example chat.');
-  }
+const rawText = await loadExample();
+const messages = parseChat(rawText);
+const stats = computeStatistics(messages);
 
-  if (!messages.some((message) => message.content.includes('ec8s61tkc7gzvk4cim6a'))) {
-    throw new Error('Expected to find the generated WiFi password sample in the chat.');
-  }
+test('parseChat extracts the sample conversation', () => {
+  assert.equal(messages.length, 11);
+  assert.ok(messages.every((message) => message.timestamp instanceof Date));
+  assert.equal(messages[0].author, '~Ieommq');
+  assert.ok(messages.some((message) => message.content.includes('ec8s61tkc7gzvk4cim6a')));
+  assert.match(messages[2].content, /This message was edited/);
+});
 
-  const stats = computeStatistics(messages);
-  if (stats.participants.length < 2) {
-    throw new Error('Expected at least two participants in the example chat.');
-  }
+test('computeStatistics summarises the conversation accurately', () => {
+  assert.equal(stats.totalMessages, 11);
+  assert.equal(stats.totalWords, 43);
+  assert.deepStrictEqual(stats.participants, ['~Ieommq', 'Imbl']);
+  assert.deepStrictEqual(stats.messageCountByParticipant, { '~Ieommq': 7, Imbl: 4 });
+  assert.deepStrictEqual(stats.wordCountByParticipant, { '~Ieommq': 27, Imbl: 16 });
+  assert.equal(stats.messagesByHour[3], 11);
+  assert.deepStrictEqual(stats.busiestDay, { date: '2025-07-31', count: 11 });
+  assert.equal(stats.busiestHour, 3);
+  assert.equal(stats.longestStreak, 1);
+  assert.deepStrictEqual(stats.longestStreakRange, { start: '2025-07-31', end: '2025-07-31' });
+  assert.deepStrictEqual(stats.topWords.slice(0, 6), [
+    ['end', 2],
+    ['only', 2],
+    ['morning', 2],
+    ['imbl', 2],
+    ['sorry', 2],
+    ['send', 2]
+  ]);
+  assert.deepStrictEqual(stats.responseTimes, { Imbl: 1.12, '~Ieommq': 1.49 });
+});
 
-  const expectedParticipants = ['~Ieommq', 'Imbl'];
-  for (const participant of expectedParticipants) {
-    if (!stats.participants.includes(participant)) {
-      throw new Error(`Expected participant ${participant} to be detected in the chat.`);
-    }
-  }
+test('filterMessagesByDate respects inclusive date ranges', () => {
+  const fullDay = filterMessagesByDate(messages, '2025-07-31', '2025-07-31');
+  assert.equal(fullDay.length, 11);
 
-  if (stats.totalMessages !== 11) {
-    throw new Error(`Example chat should contain 11 messages, found ${stats.totalMessages}.`);
-  }
+  const future = filterMessagesByDate(messages, '2025-08-01', '2025-08-01');
+  assert.equal(future.length, 0);
 
-  if (stats.totalMessages <= 0) {
-    throw new Error('Statistics should report at least one message.');
-  }
+  const openEnded = filterMessagesByDate(messages, null, '2025-07-30');
+  assert.equal(openEnded.length, 0);
+});
 
+test('generateMarkdownSummary produces a rich overview', () => {
   const markdown = generateMarkdownSummary({
     title: 'Example Chat Recap',
     messages,
@@ -56,21 +78,10 @@ async function main() {
     sampleCount: 2
   });
 
-  if (!markdown.includes('# Example Chat Recap')) {
-    throw new Error('Markdown summary did not include the custom title.');
-  }
-
-  if (!markdown.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
-    throw new Error('Markdown summary should include the detected timeframe of the new sample chat.');
-  }
-
-  console.log('Parsed messages:', messages.length);
-  console.log('Participants detected:', stats.participants.join(', '));
-  console.log('Top word sample:', stats.topWords.slice(0, 3));
-  console.log('Markdown preview snippet:', markdown.split('\n').slice(0, 5).join('\n'));
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
+  assert.match(markdown, /^# Example Chat Recap/m);
+  assert.match(markdown, /\*\*Timeframe:\*\* 2025-07-31 → 2025-07-31/);
+  assert.match(markdown, /## Participation/);
+  assert.match(markdown, /~Ieommq: \*\*7\*\* messages/);
+  assert.match(markdown, /## Frequently used words/);
+  assert.match(markdown, /## Representative moments/);
 });
