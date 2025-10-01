@@ -266,7 +266,18 @@ function round(value, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
-export function computeStatistics(messages) {
+export function computeStatistics(messages, options = {}) {
+  const { responseThresholdMinutes: rawResponseThresholdMinutes } = options;
+  let responseThresholdMinutes = rawResponseThresholdMinutes;
+
+  if (typeof responseThresholdMinutes !== 'number' || Number.isNaN(responseThresholdMinutes)) {
+    responseThresholdMinutes = 360;
+  }
+
+  if (responseThresholdMinutes < 0) {
+    responseThresholdMinutes = 0;
+  }
+
   if (!messages.length) {
     return {
       totalMessages: 0,
@@ -287,7 +298,8 @@ export function computeStatistics(messages) {
       busiestHour: null,
       longestStreak: 0,
       longestStreakRange: null,
-      responseTimes: {}
+      responseTimes: {},
+      responseTimeThreshold: responseThresholdMinutes
     };
   }
 
@@ -354,7 +366,10 @@ export function computeStatistics(messages) {
       if (!responseTracking[author]) {
         responseTracking[author] = [];
       }
-      responseTracking[author].push(delta);
+
+      if (delta <= responseThresholdMinutes) {
+        responseTracking[author].push(delta);
+      }
     }
 
     previousMessage = message;
@@ -428,7 +443,8 @@ export function computeStatistics(messages) {
     busiestHour,
     longestStreak: streaks.length,
     longestStreakRange: streaks.range,
-    responseTimes
+    responseTimes,
+    responseTimeThreshold: responseThresholdMinutes
   };
 }
 

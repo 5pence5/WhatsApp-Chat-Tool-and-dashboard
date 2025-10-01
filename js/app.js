@@ -13,6 +13,8 @@ let participantsChart = null;
 let hourlyChart = null;
 let activeDateFormat = 'DMY';
 let rawChatText = '';
+const DEFAULT_RESPONSE_THRESHOLD_MINUTES = 360;
+let responseThresholdMinutes = DEFAULT_RESPONSE_THRESHOLD_MINUTES;
 
 const fileInput = document.getElementById('chat-file');
 const fileHelper = document.getElementById('file-helper');
@@ -27,10 +29,27 @@ const topWordsList = document.getElementById('top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
+const responseThresholdSelect = document.getElementById('response-threshold');
+const responseThresholdInfo = document.getElementById('response-threshold-info');
 const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+
+function parseThresholdValue(value) {
+  if (value === 'infinite') {
+    return Number.POSITIVE_INFINITY;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_RESPONSE_THRESHOLD_MINUTES;
+  }
+  return Math.max(0, parsed);
+}
+
+if (responseThresholdSelect) {
+  responseThresholdMinutes = parseThresholdValue(responseThresholdSelect.value);
+}
 
 dateFormatChooser.id = 'date-format-chooser';
 dateFormatChooser.className = 'date-format-chooser';
@@ -261,6 +280,9 @@ function updateResponseTimesList(currentStats) {
 
   if (!currentStats.participants.length) {
     responseTimesList.innerHTML = '<li class="empty">No participants yet</li>';
+    if (responseThresholdInfo) {
+      responseThresholdInfo.textContent = 'Select a chat to analyse reply times.';
+    }
     return;
   }
 
@@ -268,6 +290,27 @@ function updateResponseTimesList(currentStats) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1
   });
+
+  if (responseThresholdInfo) {
+    const threshold = currentStats.responseTimeThreshold;
+    if (!Number.isFinite(threshold)) {
+      responseThresholdInfo.textContent = 'Including every gap between messages.';
+    } else {
+      const hours = Math.floor(threshold / 60);
+      const minutes = Math.round(threshold % 60);
+      const parts = [];
+      if (hours > 0) {
+        parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`);
+      }
+      if (minutes > 0) {
+        parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`);
+      }
+      if (!parts.length) {
+        parts.push('0 minutes');
+      }
+      responseThresholdInfo.textContent = `Ignoring gaps longer than ${parts.join(' ')}.`;
+    }
+  }
 
   const entries = currentStats.participants
     .map((participant, index) => {
@@ -330,7 +373,7 @@ function buildInsights(currentStats) {
 }
 
 function enableControls(enabled) {
-  [startDateInput, endDateInput, applyRangeButton, resetRangeButton, generateMdButton].forEach((el) => {
+  [startDateInput, endDateInput, applyRangeButton, resetRangeButton, generateMdButton, responseThresholdSelect].forEach((el) => {
     el.disabled = !enabled;
   });
 }
@@ -340,7 +383,7 @@ function applyFilters() {
   const end = endDateInput.value || null;
 
   filteredMessages = filterMessagesByDate(allMessages, start, end);
-  stats = computeStatistics(filteredMessages);
+  stats = computeStatistics(filteredMessages, { responseThresholdMinutes });
   updateSummaryCards(stats);
   updateCharts(stats);
 
@@ -354,7 +397,7 @@ function resetFilters() {
   startDateInput.value = formatDateForInput(fullStats.firstMessageDate);
   endDateInput.value = formatDateForInput(fullStats.lastMessageDate);
   filteredMessages = [...allMessages];
-  stats = computeStatistics(filteredMessages);
+  stats = computeStatistics(filteredMessages, { responseThresholdMinutes });
   updateSummaryCards(stats);
   updateCharts(stats);
   updateTopList(topWordsList, stats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
@@ -373,7 +416,7 @@ function processParsedChat(parseResult, options = {}) {
   allMessages = messages;
   filteredMessages = [...messages];
   activeDateFormat = dateFormat;
-  fullStats = computeStatistics(messages);
+  fullStats = computeStatistics(messages, { responseThresholdMinutes });
   stats = fullStats;
 
   const firstDate = formatDateForInput(fullStats.firstMessageDate);
@@ -492,6 +535,17 @@ generateMdButton.addEventListener('click', () => {
   prepareMarkdown();
   loadStatus.textContent = 'Markdown summary generated!';
 });
+
+if (responseThresholdSelect) {
+  responseThresholdSelect.addEventListener('change', () => {
+    responseThresholdMinutes = parseThresholdValue(responseThresholdSelect.value);
+    if (!allMessages.length) {
+      return;
+    }
+    fullStats = computeStatistics(allMessages, { responseThresholdMinutes });
+    applyFilters();
+  });
+}
 
 document.addEventListener('dragover', (event) => {
   if (event.target === fileInput || fileInput.contains(event.target)) return;
