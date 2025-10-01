@@ -340,8 +340,8 @@ fileInput.addEventListener('change', async (event) => {
   if (!file) return;
 
   fileHelper.textContent = file.name;
-  loadStatus.textContent = 'Parsing chat…';
   clearStatus();
+  loadStatus.textContent = 'Parsing chat…';
 
   try {
     const rawText = await loadChatFile(file);
