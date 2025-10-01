@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { parseChat, computeStatistics, generateMarkdownSummary } from '../js/chatParser.js';
+import { parseChat, computeStatistics, generateMarkdownSummary, generateMarkdownTranscript } from '../js/chatParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +82,36 @@ async function main() {
 
   if (!markdown.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
     throw new Error('Markdown summary should include the detected timeframe of the new sample chat.');
+  }
+
+  const transcript = generateMarkdownTranscript({
+    title: 'Example Chat Transcript',
+    messages,
+    includeSystemMessages: false
+  });
+
+  if (!transcript.includes('# Example Chat Transcript')) {
+    throw new Error('Transcript export should honour the provided title.');
+  }
+
+  if (!transcript.includes('```')) {
+    throw new Error('Transcript export should include a fenced code block for the conversation.');
+  }
+
+  if (!transcript.includes('[2025-07-31')) {
+    throw new Error('Transcript export should include message timestamps.');
+  }
+
+  const transcriptWithMeta = generateMarkdownTranscript({
+    title: 'Example Chat Transcript',
+    messages,
+    includeSystemMessages: true,
+    startDate: '2025-07-31',
+    endDate: '2025-07-31'
+  });
+
+  if (!transcriptWithMeta.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
+    throw new Error('Transcript export should surface the supplied date range.');
   }
 
   console.log('Parsed messages:', messages.length);

@@ -108,18 +108,40 @@
         <h2 id="export-title">Export a Markdown recap</h2>
         <p>Generate a polished summary for wikis, retros, or changelog entries.</p>
       </div>
-      <div class="export-controls">
-        <label>
-          <span>Summary title</span>
-          <input type="text" id="md-title" placeholder="e.g. Sprint Retro – Team Chat Highlights" />
-        </label>
-        <label>
-          <span>Include sample messages</span>
-          <input type="number" id="sample-count" min="0" max="10" value="3" />
-        </label>
-        <button id="generate-md" disabled>Download Markdown</button>
+
+      <div class="export-section">
+        <h3>Insight summary</h3>
+        <p>Create a concise overview of the selected timeframe, including top stats and sample messages.</p>
+        <div class="export-controls">
+          <label>
+            <span>Summary title</span>
+            <input type="text" id="md-title" placeholder="e.g. Sprint Retro – Team Chat Highlights" />
+          </label>
+          <label>
+            <span>Include sample messages</span>
+            <input type="number" id="sample-count" min="0" max="10" value="3" />
+          </label>
+          <button id="generate-md" disabled>Download summary Markdown</button>
+        </div>
+        <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
       </div>
-      <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
+
+      <div class="export-section">
+        <h3>Chat transcript for LLMs</h3>
+        <p>Use the active date filters to control the transcript window, then export the messages as Markdown.</p>
+        <div class="export-controls">
+          <label>
+            <span>Transcript title</span>
+            <input type="text" id="transcript-title" placeholder="e.g. Incident review – Chat transcript" />
+          </label>
+          <label class="checkbox-option">
+            <input type="checkbox" id="include-system-messages" />
+            <span>Include system messages (e.g. "You changed the group icon")</span>
+          </label>
+          <button id="download-transcript" disabled>Download transcript Markdown</button>
+        </div>
+        <textarea id="transcript-preview" aria-label="Transcript markdown preview" readonly placeholder="Filtered chat transcript will appear here after export."></textarea>
+      </div>
     </section>
   </main>
 

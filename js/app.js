@@ -2,7 +2,8 @@ import {
   parseChat,
   computeStatistics,
   filterMessagesByDate,
-  generateMarkdownSummary
+  generateMarkdownSummary,
+  generateMarkdownTranscript
 } from './chatParser.js';
 
 let allMessages = [];
@@ -28,6 +29,10 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+const transcriptTitleInput = document.getElementById('transcript-title');
+const includeSystemCheckbox = document.getElementById('include-system-messages');
+const downloadTranscriptButton = document.getElementById('download-transcript');
+const transcriptPreview = document.getElementById('transcript-preview');
 
 async function loadChatFile(file) {
   if (!file) return null;
@@ -278,9 +283,25 @@ function buildInsights(currentStats) {
 }
 
 function enableControls(enabled) {
-  [startDateInput, endDateInput, applyRangeButton, resetRangeButton, generateMdButton].forEach((el) => {
+  [
+    startDateInput,
+    endDateInput,
+    applyRangeButton,
+    resetRangeButton,
+    generateMdButton,
+    transcriptTitleInput,
+    includeSystemCheckbox,
+    downloadTranscriptButton
+  ].forEach((el) => {
+    if (!el) return;
     el.disabled = !enabled;
   });
+
+  if (!enabled) {
+    if (mdPreview) mdPreview.value = '';
+    if (transcriptPreview) transcriptPreview.value = '';
+    if (includeSystemCheckbox) includeSystemCheckbox.checked = false;
+  }
 }
 
 function applyFilters() {
@@ -295,6 +316,14 @@ function applyFilters() {
   updateTopList(topWordsList, stats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
   updateTopList(topEmojisList, stats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
   buildInsights(stats);
+
+  const hasMessages = filteredMessages.length > 0;
+  if (generateMdButton) {
+    generateMdButton.disabled = !hasMessages;
+  }
+  if (downloadTranscriptButton) {
+    downloadTranscriptButton.disabled = !hasMessages;
+  }
 }
 
 function resetFilters() {
@@ -308,6 +337,13 @@ function resetFilters() {
   updateTopList(topWordsList, stats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
   updateTopList(topEmojisList, stats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
   buildInsights(stats);
+
+  if (generateMdButton) {
+    generateMdButton.disabled = filteredMessages.length === 0;
+  }
+  if (downloadTranscriptButton) {
+    downloadTranscriptButton.disabled = filteredMessages.length === 0;
+  }
 }
 
 function showError(message) {
@@ -333,16 +369,61 @@ function prepareMarkdown() {
   });
 
   mdPreview.value = markdown;
+  downloadMarkdown(markdown, mdTitleInput.value || 'whatsapp-chat-summary');
+}
 
+function downloadMarkdown(markdown, baseName) {
+  const safeName = (baseName || 'whatsapp-chat').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'whatsapp-chat';
   const blob = new Blob([markdown], { type: 'text/markdown' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${(mdTitleInput.value || 'whatsapp-chat-summary').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+  link.download = `${safeName}.md`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function prepareTranscript() {
+  if (!filteredMessages.length) {
+    const message = 'No messages are available in the selected range to export.';
+    loadStatus.textContent = message;
+    loadStatus.classList.remove('error');
+    if (transcriptPreview) {
+      transcriptPreview.value = '';
+    }
+    return false;
+  }
+
+  const includeSystemMessages = includeSystemCheckbox?.checked ?? false;
+  const relevantMessages = includeSystemMessages
+    ? filteredMessages
+    : filteredMessages.filter((message) => message.type !== 'system');
+
+  if (!relevantMessages.length) {
+    const message = 'The selected range only contains system notifications. Adjust the filters or include system messages.';
+    loadStatus.textContent = message;
+    loadStatus.classList.remove('error');
+    if (transcriptPreview) {
+      transcriptPreview.value = '';
+    }
+    return false;
+  }
+
+  const markdown = generateMarkdownTranscript({
+    title: transcriptTitleInput.value.trim() || 'WhatsApp Chat Transcript',
+    messages: filteredMessages,
+    includeSystemMessages,
+    startDate: startDateInput.value || undefined,
+    endDate: endDateInput.value || undefined
+  });
+
+  if (transcriptPreview) {
+    transcriptPreview.value = markdown;
+  }
+  downloadMarkdown(markdown, transcriptTitleInput.value || 'whatsapp-chat-transcript');
+  return true;
 }
 
 fileInput.addEventListener('change', async (event) => {
@@ -401,6 +482,14 @@ generateMdButton.addEventListener('click', () => {
   loadStatus.textContent = 'Markdown summary generated!';
 });
 
+downloadTranscriptButton.addEventListener('click', () => {
+  const success = prepareTranscript();
+  if (success) {
+    loadStatus.textContent = 'Markdown transcript downloaded!';
+    loadStatus.classList.remove('error');
+  }
+});
+
 document.addEventListener('dragover', (event) => {
   if (event.target === fileInput || fileInput.contains(event.target)) return;
   event.preventDefault();
@@ -416,4 +505,10 @@ document.addEventListener('drop', async (event) => {
 window.addEventListener('DOMContentLoaded', () => {
   enableControls(false);
   mdPreview.value = '';
+  if (transcriptPreview) {
+    transcriptPreview.value = '';
+  }
+  if (includeSystemCheckbox) {
+    includeSystemCheckbox.checked = false;
+  }
 });

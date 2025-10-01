@@ -474,3 +474,53 @@ export function generateMarkdownSummary({
 
   return lines.join('\n');
 }
+
+export function generateMarkdownTranscript({
+  title = 'WhatsApp Chat Transcript',
+  messages = [],
+  includeSystemMessages = false,
+  startDate,
+  endDate
+}) {
+  const relevantMessages = includeSystemMessages
+    ? [...messages]
+    : messages.filter((message) => message.type !== 'system');
+
+  const lines = [];
+  lines.push(`# ${title}`);
+
+  if (startDate && endDate) {
+    lines.push(`**Timeframe:** ${startDate} → ${endDate}`);
+  } else if (relevantMessages.length) {
+    const ordered = [...relevantMessages].sort((a, b) => a.timestamp - b.timestamp);
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1];
+    lines.push(`**Timeframe:** ${formatLocalDateKey(first.timestamp)} → ${formatLocalDateKey(last.timestamp)}`);
+  }
+
+  lines.push('');
+
+  if (!relevantMessages.length) {
+    lines.push('_No messages available in this period._');
+    lines.push('\n---\n_Generated with the WhatsApp Chat Insights Dashboard._');
+    return lines.join('\n');
+  }
+
+  const label = includeSystemMessages ? 'Total entries' : 'Total participant messages';
+  lines.push(`- **${label}:** ${relevantMessages.length.toLocaleString()}`);
+  lines.push('');
+  lines.push('```');
+
+  for (const message of relevantMessages) {
+    const timestamp = formatLocalDateTime(message.timestamp);
+    const author = message.type === 'system' ? 'System' : message.author;
+    const content = message.content || '';
+    const formatted = content.replace(/```/g, '\u0060\u0060\u0060');
+    lines.push(`[${timestamp}] ${author}: ${formatted}`);
+  }
+
+  lines.push('```');
+  lines.push('\n---\n_Generated with the WhatsApp Chat Insights Dashboard._');
+
+  return lines.join('\n');
+}
