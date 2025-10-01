@@ -264,6 +264,55 @@ button.subtle {
   color: var(--muted);
 }
 
+.response-time-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.response-time-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.response-time-list li .response-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.response-time-list li .response-time-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.response-time-list li .response-time-value::before {
+  content: '·';
+  color: var(--muted);
+}
+
+.response-time-list li.empty {
+  justify-content: center;
+  color: var(--muted);
+  font-weight: 400;
+  background: rgba(148, 163, 184, 0.08);
+  border-style: dashed;
+}
+
 .export-controls {
   display: grid;
   gap: 1rem;
