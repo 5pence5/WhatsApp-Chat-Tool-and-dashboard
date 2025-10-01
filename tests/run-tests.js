@@ -35,6 +35,30 @@ async function main() {
     throw new Error('Expected at least two participants in the example chat.');
   }
 
+  const emptyStats = computeStatistics([]);
+  if (Object.keys(emptyStats.topWordsByParticipant || {}).length !== 0) {
+    throw new Error('Empty statistics should expose an empty topWordsByParticipant map.');
+  }
+
+  if (!stats.topWordsByParticipant || typeof stats.topWordsByParticipant !== 'object') {
+    throw new Error('Statistics should expose per-participant top word breakdowns.');
+  }
+
+  for (const participant of stats.participants) {
+    const entries = stats.topWordsByParticipant[participant];
+    if (!Array.isArray(entries)) {
+      throw new Error(`Expected top word entries for ${participant} to be an array.`);
+    }
+    if (entries.length > 10) {
+      throw new Error(`Top word list for ${participant} should be limited to 10 items.`);
+    }
+    for (let i = 1; i < entries.length; i += 1) {
+      if (entries[i][1] > entries[i - 1][1]) {
+        throw new Error(`Top words for ${participant} should be sorted in descending frequency.`);
+      }
+    }
+  }
+
   const mediaPlaceholderMessage = {
     timestamp: new Date(messages[0].timestamp.getTime() + 60000),
     author: messages[0].author,
@@ -185,6 +209,58 @@ async function main() {
 
   if (bufferedResponse.responseGapOvernightBufferMinutes !== 480) {
     throw new Error('Expected overnight buffer setting to be surfaced in the statistics payload.');
+  }
+
+  const breakdownMessages = [
+    { timestamp: new Date(2024, 0, 1, 0, 0), author: 'Ann', content: 'alpha alpha beta gamma', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 0, 1), author: 'Bob', content: 'delta epsilon delta', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 0, 2), author: 'Ann', content: 'beta gamma gamma', type: 'message' }
+  ];
+
+  const breakdownStats = computeStatistics(breakdownMessages);
+  const annBreakdown = breakdownStats.topWordsByParticipant.Ann;
+  if (!annBreakdown || annBreakdown.length < 3) {
+    throw new Error('Expected Ann to have at least three tracked words.');
+  }
+  if (annBreakdown[0][0] !== 'gamma' || annBreakdown[0][1] !== 3) {
+    throw new Error('Ann’s most common word should be gamma with three uses.');
+  }
+  if (annBreakdown[1][0] !== 'alpha' || annBreakdown[1][1] !== 2) {
+    throw new Error('Ann’s second entry should be alpha with two uses.');
+  }
+  if (annBreakdown[2][0] !== 'beta' || annBreakdown[2][1] !== 2) {
+    throw new Error('Ann’s third entry should be beta with two uses.');
+  }
+
+  const bobBreakdown = breakdownStats.topWordsByParticipant.Bob;
+  if (!bobBreakdown || bobBreakdown.length !== 2) {
+    throw new Error('Expected Bob to have exactly two tracked words.');
+  }
+  if (bobBreakdown[0][0] !== 'delta' || bobBreakdown[0][1] !== 2) {
+    throw new Error('Bob’s top word should be delta with two uses.');
+  }
+  if (bobBreakdown[1][0] !== 'epsilon' || bobBreakdown[1][1] !== 1) {
+    throw new Error('Bob’s second word should be epsilon with one use.');
+  }
+
+  const overflowWords = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu'];
+  const overflowMessages = overflowWords.map((word, index) => ({
+    timestamp: new Date(2024, 0, 2, 0, index),
+    author: 'Overflow',
+    content: `${word} ${word}`,
+    type: 'message'
+  }));
+
+  const overflowStats = computeStatistics(overflowMessages);
+  const overflowBreakdown = overflowStats.topWordsByParticipant.Overflow;
+  if (!overflowBreakdown || overflowBreakdown.length !== 10) {
+    throw new Error('Overflow participant should only surface the top 10 words.');
+  }
+  if (!overflowBreakdown.every(([, count]) => count === 2)) {
+    throw new Error('Overflow breakdown should retain the recorded counts for each word.');
+  }
+  if (overflowBreakdown.some(([word]) => word === 'theta' || word === 'zeta')) {
+    throw new Error('Overflow breakdown should omit words outside the top 10.');
   }
 
   console.log('Parsed messages:', messages.length);
