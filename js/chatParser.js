@@ -28,16 +28,89 @@ function matchMessageHeader(line) {
 }
 
 function determineDateFormat(lines) {
+  const ambiguousSamples = [];
+
   for (const line of lines) {
     const header = matchMessageHeader(line);
-    if (header) {
-      const first = parseInt(header.day, 10);
-      const second = parseInt(header.month, 10);
-      if (first > 12) return 'DMY';
-      if (second > 12) return 'MDY';
+    if (!header) continue;
+
+    const first = parseInt(header.day, 10);
+    const second = parseInt(header.month, 10);
+
+    if (first > 12 && second <= 12) {
+      return { format: 'DMY', ambiguous: false, candidates: [] };
+    }
+
+    if (second > 12 && first <= 12) {
+      return { format: 'MDY', ambiguous: false, candidates: [] };
+    }
+
+    if (first <= 12 && second <= 12) {
+      ambiguousSamples.push(header);
+      if (ambiguousSamples.length >= 50) {
+        break;
+      }
     }
   }
-  return 'DMY';
+
+  if (!ambiguousSamples.length) {
+    return { format: 'DMY', ambiguous: false, candidates: [] };
+  }
+
+  const evaluateFormat = (format) => {
+    let previous = null;
+    let decreases = 0;
+    let validCount = 0;
+    let firstDate = null;
+    let lastDate = null;
+
+    for (const sample of ambiguousSamples) {
+      const candidateDate = parseDate(sample.day, sample.month, sample.year, sample.time, format);
+      if (Number.isNaN(candidateDate.getTime())) continue;
+
+      if (!firstDate) {
+        firstDate = candidateDate;
+      }
+
+      if (previous && candidateDate.getTime() < previous.getTime()) {
+        decreases += 1;
+      }
+
+      previous = candidateDate;
+      lastDate = candidateDate;
+      validCount += 1;
+    }
+
+    const span = firstDate && lastDate ? Math.abs(lastDate.getTime() - firstDate.getTime()) : 0;
+
+    return { format, decreases, span, validCount };
+  };
+
+  const evaluations = ['DMY', 'MDY'].map((format) => evaluateFormat(format));
+
+  const best = evaluations.reduce((currentBest, candidate) => {
+    if (!currentBest) return candidate;
+
+    if (candidate.decreases !== currentBest.decreases) {
+      return candidate.decreases < currentBest.decreases ? candidate : currentBest;
+    }
+
+    if (candidate.span !== currentBest.span) {
+      return candidate.span < currentBest.span ? candidate : currentBest;
+    }
+
+    if (candidate.validCount !== currentBest.validCount) {
+      return candidate.validCount > currentBest.validCount ? candidate : currentBest;
+    }
+
+    return currentBest;
+  }, null);
+
+  return {
+    format: best.format,
+    ambiguous: true,
+    candidates: evaluations
+  };
 }
 
 function parseDate(day, month, year, timeStr, format) {
@@ -83,11 +156,22 @@ function normaliseAuthor(author) {
   return author.replace(/^"|"$/g, '').trim();
 }
 
-export function parseChat(rawText) {
-  if (!rawText) return [];
+export function parseChat(rawText, options = {}) {
+  const { dateFormat: dateFormatOverride } = options;
+
+  if (!rawText) {
+    return {
+      messages: [],
+      dateFormat: dateFormatOverride || 'DMY',
+      ambiguous: false,
+      candidates: [],
+      usedOverride: Boolean(dateFormatOverride)
+    };
+  }
   const text = rawText.replace(/\uFEFF/g, '');
   const lines = text.split(/\r?\n/);
-  const format = determineDateFormat(lines);
+  const determination = determineDateFormat(lines);
+  const format = dateFormatOverride || determination.format;
 
   const messages = [];
   let current = null;
@@ -128,7 +212,15 @@ export function parseChat(rawText) {
     messages.push(current);
   }
 
-  return messages.filter((msg) => !Number.isNaN(msg.timestamp.getTime()));
+  const filtered = messages.filter((msg) => !Number.isNaN(msg.timestamp.getTime()));
+
+  return {
+    messages: filtered,
+    dateFormat: format,
+    ambiguous: determination.ambiguous,
+    candidates: determination.candidates,
+    usedOverride: Boolean(dateFormatOverride)
+  };
 }
 
 function isMediaMessage(content) {
