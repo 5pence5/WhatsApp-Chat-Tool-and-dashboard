@@ -2,7 +2,8 @@ import {
   parseChat,
   computeStatistics,
   filterMessagesByDate,
-  generateMarkdownSummary
+  generateMarkdownSummary,
+  generateMarkdownTranscript
 } from './chatParser.js';
 
 let allMessages = [];
@@ -28,6 +29,9 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+const transcriptTitleInput = document.getElementById('transcript-title');
+const downloadTranscriptButton = document.getElementById('download-transcript');
+const transcriptPreview = document.getElementById('transcript-preview');
 
 async function loadChatFile(file) {
   if (!file) return null;
@@ -66,6 +70,28 @@ function formatDateFriendly(date) {
     month: 'short',
     day: 'numeric'
   }).format(date);
+}
+
+function slugifyFileName(text, fallback) {
+  const base = (text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .trim();
+  const slug = base || fallback;
+  return `${slug}.md`;
+}
+
+function downloadMarkdownFile(markdown, fileName) {
+  const blob = new Blob([markdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function updateSummaryCards(currentStats) {
@@ -278,7 +304,14 @@ function buildInsights(currentStats) {
 }
 
 function enableControls(enabled) {
-  [startDateInput, endDateInput, applyRangeButton, resetRangeButton, generateMdButton].forEach((el) => {
+  [
+    startDateInput,
+    endDateInput,
+    applyRangeButton,
+    resetRangeButton,
+    generateMdButton,
+    downloadTranscriptButton
+  ].forEach((el) => {
     el.disabled = !enabled;
   });
 }
@@ -333,16 +366,22 @@ function prepareMarkdown() {
   });
 
   mdPreview.value = markdown;
+  const fileName = slugifyFileName(mdTitleInput.value, 'whatsapp-chat-summary');
+  downloadMarkdownFile(markdown, fileName);
+}
 
-  const blob = new Blob([markdown], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${(mdTitleInput.value || 'whatsapp-chat-summary').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
+function prepareTranscript() {
+  if (!filteredMessages) return;
+  const markdown = generateMarkdownTranscript({
+    title: transcriptTitleInput.value.trim() || 'WhatsApp Chat Transcript',
+    messages: filteredMessages,
+    startDate: startDateInput.value || undefined,
+    endDate: endDateInput.value || undefined
+  });
+
+  transcriptPreview.value = markdown;
+  const fileName = slugifyFileName(transcriptTitleInput.value, 'whatsapp-chat-transcript');
+  downloadMarkdownFile(markdown, fileName);
 }
 
 fileInput.addEventListener('change', async (event) => {
@@ -401,6 +440,11 @@ generateMdButton.addEventListener('click', () => {
   loadStatus.textContent = 'Markdown summary generated!';
 });
 
+downloadTranscriptButton.addEventListener('click', () => {
+  prepareTranscript();
+  loadStatus.textContent = 'Chat transcript generated!';
+});
+
 document.addEventListener('dragover', (event) => {
   if (event.target === fileInput || fileInput.contains(event.target)) return;
   event.preventDefault();
@@ -416,4 +460,5 @@ document.addEventListener('drop', async (event) => {
 window.addEventListener('DOMContentLoaded', () => {
   enableControls(false);
   mdPreview.value = '';
+  transcriptPreview.value = '';
 });

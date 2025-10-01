@@ -118,8 +118,22 @@
           <input type="number" id="sample-count" min="0" max="10" value="3" />
         </label>
         <button id="generate-md" disabled>Download Markdown</button>
+        <label>
+          <span>Transcript title</span>
+          <input type="text" id="transcript-title" placeholder="e.g. Sprint Retro – Chat Transcript" />
+        </label>
+        <button id="download-transcript" disabled>Download chat transcript</button>
       </div>
-      <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
+      <div class="export-previews">
+        <div>
+          <h3 class="export-preview-heading">Summary preview</h3>
+          <textarea id="md-preview" aria-label="Markdown summary preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
+        </div>
+        <div>
+          <h3 class="export-preview-heading">Transcript preview</h3>
+          <textarea id="transcript-preview" aria-label="Markdown transcript preview" readonly placeholder="Transcript markdown will appear here after generation."></textarea>
+        </div>
+      </div>
     </section>
   </main>
 

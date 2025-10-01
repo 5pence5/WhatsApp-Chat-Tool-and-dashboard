@@ -327,12 +327,26 @@ button.subtle {
   margin-top: 1.5rem;
 }
 
-#md-preview {
-  margin-top: 1rem;
+.export-previews {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.export-preview-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.export-previews textarea {
   min-height: 220px;
   resize: vertical;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   line-height: 1.5;
+  width: 100%;
 }
 
 .app-footer {
@@ -349,7 +363,8 @@ button.subtle {
   .charts-grid,
   .stats-grid,
   .insights-grid,
-  .export-controls {
+  .export-controls,
+  .export-previews {
     grid-template-columns: 1fr;
   }
 }
