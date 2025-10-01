@@ -23,6 +23,7 @@ const summaryCardsContainer = document.getElementById('summary-cards');
 const topWordsList = document.getElementById('top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
+const responseTimesList = document.getElementById('response-times');
 const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
@@ -194,7 +195,55 @@ function updateTopList(container, items, formatter) {
     .join('');
 }
 
+function updateResponseTimesList(currentStats) {
+  if (!responseTimesList) return;
+
+  if (!currentStats.participants.length) {
+    responseTimesList.innerHTML = '<li class="empty">No participants yet</li>';
+    return;
+  }
+
+  const formatter = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  });
+
+  const entries = currentStats.participants
+    .map((participant, index) => {
+      const value = currentStats.responseTimes?.[participant];
+      return {
+        participant,
+        minutes: typeof value === 'number' ? value : null,
+        order: index
+      };
+    })
+    .sort((a, b) => {
+      if (a.minutes === null && b.minutes === null) {
+        return a.order - b.order;
+      }
+      if (a.minutes === null) return 1;
+      if (b.minutes === null) return -1;
+      if (a.minutes === b.minutes) {
+        return a.participant.localeCompare(b.participant);
+      }
+      return a.minutes - b.minutes;
+    });
+
+  responseTimesList.innerHTML = entries
+    .map(({ participant, minutes }) => {
+      const label = minutes === null ? '—' : `${formatter.format(minutes)} min`;
+      return `
+        <li>
+          <span class="response-name">${participant}</span>
+          <span class="response-time-value">${label}</span>
+        </li>
+      `;
+    })
+    .join('');
+}
+
 function buildInsights(currentStats) {
+  updateResponseTimesList(currentStats);
   const insights = [];
   if (currentStats.busiestDay) {
     insights.push(`Most active day: <strong>${currentStats.busiestDay.date}</strong> with ${currentStats.busiestDay.count} messages.`);
