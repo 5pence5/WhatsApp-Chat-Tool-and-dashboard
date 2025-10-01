@@ -94,6 +94,27 @@
         </div>
         <div>
           <h3>Average reply times</h3>
+          <div class="response-controls">
+            <label class="response-field">
+              <span>Ignore gaps longer than</span>
+              <div class="response-input-row">
+                <input type="number" id="response-gap-limit" min="0" step="15" placeholder="e.g. 180" disabled />
+                <span class="suffix">min</span>
+              </div>
+            </label>
+            <label class="response-field response-toggle">
+              <input type="checkbox" id="response-overnight-toggle" disabled />
+              <span>Add overnight buffer</span>
+            </label>
+            <label class="response-field">
+              <span>Overnight buffer</span>
+              <div class="response-input-row">
+                <input type="number" id="response-overnight-minutes" min="0" step="30" value="480" disabled />
+                <span class="suffix">min</span>
+              </div>
+            </label>
+          </div>
+          <p class="response-cutoff-note" id="response-cutoff-note">Average reply times will appear once a chat is loaded.</p>
           <ul id="response-times" class="response-time-list" aria-live="polite"></ul>
         </div>
         <div>

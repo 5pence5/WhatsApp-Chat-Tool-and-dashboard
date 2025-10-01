@@ -27,6 +27,10 @@ const topWordsList = document.getElementById('top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
+const responseGapInput = document.getElementById('response-gap-limit');
+const responseOvernightToggle = document.getElementById('response-overnight-toggle');
+const responseOvernightMinutesInput = document.getElementById('response-overnight-minutes');
+const responseCutoffNote = document.getElementById('response-cutoff-note');
 const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
@@ -78,6 +82,40 @@ function formatDateFriendly(date) {
 
 function describeDateFormat(format) {
   return format === 'MDY' ? 'month/day/year' : 'day/month/year';
+}
+
+function getResponseOptions() {
+  if (!responseGapInput) {
+    return {};
+  }
+
+  const gapValue = Number(responseGapInput.value);
+  const hasGap = Number.isFinite(gapValue) && gapValue > 0;
+  const responseGapMinutes = hasGap ? gapValue : null;
+
+  const overnightEnabled = Boolean(responseOvernightToggle?.checked) && hasGap;
+  const overnightValue = Number(responseOvernightMinutesInput?.value);
+  const overnightBufferMinutes = overnightEnabled && Number.isFinite(overnightValue) && overnightValue > 0
+    ? overnightValue
+    : 0;
+
+  return {
+    responseGapMinutes,
+    overnightBufferMinutes
+  };
+}
+
+function syncResponseControlState() {
+  if (!responseGapInput || !responseOvernightToggle || !responseOvernightMinutesInput) {
+    return;
+  }
+
+  const gapValue = Number(responseGapInput.value);
+  const hasGap = Number.isFinite(gapValue) && gapValue > 0 && !responseGapInput.disabled;
+
+  responseOvernightToggle.disabled = !hasGap;
+  const overnightEnabled = hasGap && responseOvernightToggle.checked && !responseOvernightToggle.disabled;
+  responseOvernightMinutesInput.disabled = !overnightEnabled;
 }
 
 function hideDateFormatChooser() {
@@ -256,6 +294,20 @@ function updateTopList(container, items, formatter) {
     .join('');
 }
 
+function renderStats(currentStats) {
+  updateSummaryCards(currentStats);
+  updateCharts(currentStats);
+  updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
+  updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
+  buildInsights(currentStats);
+}
+
+function refreshStats() {
+  const options = getResponseOptions();
+  stats = computeStatistics(filteredMessages, options);
+  renderStats(stats);
+}
+
 function updateResponseTimesList(currentStats) {
   if (!responseTimesList) return;
 
@@ -303,8 +355,43 @@ function updateResponseTimesList(currentStats) {
     .join('');
 }
 
+function updateResponseCutoffNote(currentStats) {
+  if (!responseCutoffNote) return;
+
+  if (!currentStats || typeof currentStats.totalMessages === 'undefined') {
+    responseCutoffNote.textContent = 'Average reply times will appear once a chat is loaded.';
+    return;
+  }
+
+  if (!currentStats.participants.length) {
+    responseCutoffNote.textContent = 'Average reply times will appear once participants start chatting.';
+    return;
+  }
+
+  const hasResponseData = Object.values(currentStats.responseTimes || {}).some((value) => typeof value === 'number');
+  const gap = currentStats.responseGapMinutes;
+  const overnight = currentStats.responseGapOvernightBufferMinutes || 0;
+
+  if (!gap) {
+    responseCutoffNote.textContent = hasResponseData
+      ? 'Counting every reply gap between different participants.'
+      : 'No qualifying reply gaps yet — once someone replies, times will appear here.';
+    return;
+  }
+
+  const parts = [`Ignoring gaps longer than ${gap.toLocaleString()} min`];
+  if (overnight) {
+    parts.push(`(+${overnight.toLocaleString()} min when replies cross midnight)`);
+  }
+
+  responseCutoffNote.textContent = hasResponseData
+    ? `${parts.join(' ')}.`
+    : `${parts.join(' ')}. No qualifying reply gaps yet with this cutoff.`;
+}
+
 function buildInsights(currentStats) {
   updateResponseTimesList(currentStats);
+  updateResponseCutoffNote(currentStats);
   const insights = [];
   if (currentStats.busiestDay) {
     insights.push(`Most active day: <strong>${currentStats.busiestDay.date}</strong> with ${currentStats.busiestDay.count} messages.`);
@@ -330,9 +417,33 @@ function buildInsights(currentStats) {
 }
 
 function enableControls(enabled) {
-  [startDateInput, endDateInput, applyRangeButton, resetRangeButton, generateMdButton].forEach((el) => {
+  [
+    startDateInput,
+    endDateInput,
+    applyRangeButton,
+    resetRangeButton,
+    generateMdButton,
+    responseGapInput,
+    responseOvernightToggle,
+    responseOvernightMinutesInput
+  ].forEach((el) => {
     el.disabled = !enabled;
   });
+  if (!enabled && responseCutoffNote) {
+    responseCutoffNote.textContent = 'Average reply times will appear once a chat is loaded.';
+  }
+  syncResponseControlState();
+}
+
+function handleResponseSettingsChange() {
+  if (!allMessages.length) {
+    syncResponseControlState();
+    return;
+  }
+
+  syncResponseControlState();
+  refreshStats();
+  loadStatus.textContent = 'Reply gap settings updated.';
 }
 
 function applyFilters() {
@@ -340,13 +451,7 @@ function applyFilters() {
   const end = endDateInput.value || null;
 
   filteredMessages = filterMessagesByDate(allMessages, start, end);
-  stats = computeStatistics(filteredMessages);
-  updateSummaryCards(stats);
-  updateCharts(stats);
-
-  updateTopList(topWordsList, stats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
-  updateTopList(topEmojisList, stats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
-  buildInsights(stats);
+  refreshStats();
 }
 
 function resetFilters() {
@@ -354,12 +459,7 @@ function resetFilters() {
   startDateInput.value = formatDateForInput(fullStats.firstMessageDate);
   endDateInput.value = formatDateForInput(fullStats.lastMessageDate);
   filteredMessages = [...allMessages];
-  stats = computeStatistics(filteredMessages);
-  updateSummaryCards(stats);
-  updateCharts(stats);
-  updateTopList(topWordsList, stats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
-  updateTopList(topEmojisList, stats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
-  buildInsights(stats);
+  refreshStats();
 }
 
 function processParsedChat(parseResult, options = {}) {
@@ -403,7 +503,7 @@ function processParsedChat(parseResult, options = {}) {
   }
 
   enableControls(true);
-  applyFilters();
+  refreshStats();
 
   renderDateFormatChooser(parseResult);
   loadStatus.classList.remove('error');
@@ -492,6 +592,10 @@ generateMdButton.addEventListener('click', () => {
   prepareMarkdown();
   loadStatus.textContent = 'Markdown summary generated!';
 });
+
+responseGapInput?.addEventListener('input', handleResponseSettingsChange);
+responseOvernightToggle?.addEventListener('change', handleResponseSettingsChange);
+responseOvernightMinutesInput?.addEventListener('input', handleResponseSettingsChange);
 
 document.addEventListener('dragover', (event) => {
   if (event.target === fileInput || fileInput.contains(event.target)) return;
