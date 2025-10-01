@@ -266,7 +266,19 @@ function round(value, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
-export function computeStatistics(messages) {
+export function computeStatistics(messages, options = {}) {
+  const {
+    responseGapMinutes,
+    overnightBufferMinutes
+  } = options;
+
+  const baseResponseGap = typeof responseGapMinutes === 'number' && responseGapMinutes > 0
+    ? responseGapMinutes
+    : null;
+  const overnightBuffer = typeof overnightBufferMinutes === 'number' && overnightBufferMinutes > 0
+    ? overnightBufferMinutes
+    : 0;
+
   if (!messages.length) {
     return {
       totalMessages: 0,
@@ -287,7 +299,9 @@ export function computeStatistics(messages) {
       busiestHour: null,
       longestStreak: 0,
       longestStreakRange: null,
-      responseTimes: {}
+      responseTimes: {},
+      responseGapMinutes: baseResponseGap,
+      responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
     };
   }
 
@@ -351,10 +365,18 @@ export function computeStatistics(messages) {
 
     if (previousMessage && previousMessage.type === 'message' && previousMessage.author !== author) {
       const delta = (message.timestamp - previousMessage.timestamp) / 60000;
+      const crossesOvernight = message.timestamp.toDateString() !== previousMessage.timestamp.toDateString();
+      const allowance = baseResponseGap === null
+        ? null
+        : baseResponseGap + (crossesOvernight ? overnightBuffer : 0);
+
       if (!responseTracking[author]) {
         responseTracking[author] = [];
       }
-      responseTracking[author].push(delta);
+
+      if (allowance === null || delta <= allowance) {
+        responseTracking[author].push(delta);
+      }
     }
 
     previousMessage = message;
@@ -428,7 +450,9 @@ export function computeStatistics(messages) {
     busiestHour,
     longestStreak: streaks.length,
     longestStreakRange: streaks.range,
-    responseTimes
+    responseTimes,
+    responseGapMinutes: baseResponseGap,
+    responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
   };
 }
 

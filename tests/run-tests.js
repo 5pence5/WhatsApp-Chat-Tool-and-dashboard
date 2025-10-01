@@ -137,6 +137,56 @@ async function main() {
     throw new Error('DMY interpretation should result in a smaller overall timespan than MDY for the ambiguous sample.');
   }
 
+  const replyGapMessages = [
+    { timestamp: new Date(2024, 0, 1, 21, 0), author: 'Alice', content: 'Evening check-in', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 21, 10), author: 'Bob', content: 'All good!', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 22, 0), author: 'Alice', content: 'Heading to sleep', type: 'message' },
+    { timestamp: new Date(2024, 0, 2, 6, 30), author: 'Bob', content: 'Morning update', type: 'message' }
+  ];
+
+  const baselineResponse = computeStatistics(replyGapMessages);
+  if (typeof baselineResponse.responseTimes.Bob !== 'number') {
+    throw new Error('Expected Bob to have an average response time in the baseline statistics.');
+  }
+
+  if (baselineResponse.responseTimes.Bob <= 200) {
+    throw new Error('Expected long overnight gaps to skew averages when no cutoff is applied.');
+  }
+
+  const trimmedResponse = computeStatistics(replyGapMessages, { responseGapMinutes: 60 });
+  if (typeof trimmedResponse.responseTimes.Bob !== 'number') {
+    throw new Error('Expected Bob to retain at least one qualifying response gap.');
+  }
+
+  if (Math.abs(trimmedResponse.responseTimes.Bob - 10) > 0.01) {
+    throw new Error('Trimming long gaps should preserve the short 10-minute reply.');
+  }
+
+  if (trimmedResponse.responseGapMinutes !== 60) {
+    throw new Error('Response gap setting should be exposed in the statistics payload.');
+  }
+
+  if (trimmedResponse.responseGapOvernightBufferMinutes !== 0) {
+    throw new Error('Overnight buffer should default to zero when not enabled.');
+  }
+
+  const bufferedResponse = computeStatistics(replyGapMessages, {
+    responseGapMinutes: 60,
+    overnightBufferMinutes: 480
+  });
+
+  if (typeof bufferedResponse.responseTimes.Bob !== 'number') {
+    throw new Error('Expected Bob to have an average when overnight buffer is applied.');
+  }
+
+  if (Math.abs(bufferedResponse.responseTimes.Bob - baselineResponse.responseTimes.Bob) > 0.01) {
+    throw new Error('Overnight buffer should retain overnight replies within the extended allowance.');
+  }
+
+  if (bufferedResponse.responseGapOvernightBufferMinutes !== 480) {
+    throw new Error('Expected overnight buffer setting to be surfaced in the statistics payload.');
+  }
+
   console.log('Parsed messages:', messages.length);
   console.log('Participants detected:', stats.participants.join(', '));
   console.log('Top word sample:', stats.topWords.slice(0, 3));
