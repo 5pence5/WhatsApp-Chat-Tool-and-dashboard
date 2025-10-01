@@ -11,6 +11,8 @@ const stopWords = new Set([
   'the','and','you','for','that','with','this','have','but','not','are','your','was','get','got','just','they','them','what','when','from','there','their','would','could','about','will','cant','dont','didnt','im','its','were','had','has','how','all','out','now','like','yeah','yes','she','his','her','who','him','our','one','why','too','wasnt','havent','into','then','than','ill','ive','did','okay','ok','sure','well','also','more','some','been','over','here','back','much','make','really','know','going','want','time','see','let','say','good','thanks','thank','thats','doesnt','aint','u','ur','lol','omg','lmfao','lmao','haha','hahaha','http','https','to','is','in','on','at','we','me','my','do','if','as','be','an','or','by','no','up','so','it','he','ya','oh','hadnt','should','ive','theyll','theyd','theirs','ours','mine','of','can'
 ]);
 
+const TOP_WORDS_PER_PARTICIPANT = 10;
+
 function matchMessageHeader(line) {
   for (const { regex } of headerPatterns) {
     const match = line.match(regex);
@@ -286,6 +288,7 @@ export function computeStatistics(messages, options = {}) {
       participants: [],
       messageCountByParticipant: {},
       wordCountByParticipant: {},
+      topWordsByParticipant: {},
       mediaCount: 0,
       systemCount: 0,
       firstMessageDate: null,
@@ -309,6 +312,7 @@ export function computeStatistics(messages, options = {}) {
   const messageCountByParticipant = {};
   const wordCountByParticipant = {};
   const totalWordsByParticipant = {};
+  const wordFrequencyByParticipant = {};
   const messagesByDate = new Map();
   const messagesByHour = new Array(24).fill(0);
   const words = [];
@@ -346,6 +350,9 @@ export function computeStatistics(messages, options = {}) {
     if (!(author in totalWordsByParticipant)) {
       totalWordsByParticipant[author] = 0;
     }
+    if (!wordFrequencyByParticipant[author]) {
+      wordFrequencyByParticipant[author] = {};
+    }
 
     totalMessages += 1;
 
@@ -357,6 +364,10 @@ export function computeStatistics(messages, options = {}) {
       totalWordsByParticipant[author] += message.content.length;
       totalWords += wordList.length;
       words.push(...wordList);
+      const authorWordCounts = wordFrequencyByParticipant[author];
+      for (const word of wordList) {
+        authorWordCounts[word] = (authorWordCounts[word] || 0) + 1;
+      }
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
         emojiCounts.set(emoji, (emojiCounts.get(emoji) || 0) + 1);
@@ -383,6 +394,19 @@ export function computeStatistics(messages, options = {}) {
   }
 
   const participants = Array.from(participantsSet).sort((a, b) => (messageCountByParticipant[b] || 0) - (messageCountByParticipant[a] || 0));
+
+  const topWordsByParticipant = {};
+  for (const participant of participants) {
+    const frequency = wordFrequencyByParticipant[participant] || {};
+    topWordsByParticipant[participant] = Object.entries(frequency)
+      .sort((a, b) => {
+        if (b[1] !== a[1]) {
+          return b[1] - a[1];
+        }
+        return a[0].localeCompare(b[0]);
+      })
+      .slice(0, TOP_WORDS_PER_PARTICIPANT);
+  }
 
   for (const [author, deltas] of Object.entries(responseTracking)) {
     if (deltas.length) {
@@ -445,6 +469,7 @@ export function computeStatistics(messages, options = {}) {
     messagesByHour,
     topWords,
     topEmojis,
+    topWordsByParticipant,
     averageMessageLength,
     busiestDay,
     busiestHour,

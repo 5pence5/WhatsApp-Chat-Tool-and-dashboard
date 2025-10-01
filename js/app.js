@@ -13,6 +13,7 @@ let participantsChart = null;
 let hourlyChart = null;
 let activeDateFormat = 'DMY';
 let rawChatText = '';
+let activeParticipantForWords = null;
 
 const fileInput = document.getElementById('chat-file');
 const fileHelper = document.getElementById('file-helper');
@@ -24,6 +25,8 @@ const applyRangeButton = document.getElementById('apply-range');
 const resetRangeButton = document.getElementById('reset-range');
 const summaryCardsContainer = document.getElementById('summary-cards');
 const topWordsList = document.getElementById('top-words');
+const participantWordSelector = document.getElementById('participant-word-selector');
+const participantTopWordsList = document.getElementById('participant-top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
@@ -294,10 +297,49 @@ function updateTopList(container, items, formatter) {
     .join('');
 }
 
+function updateParticipantTopWordList(currentStats) {
+  if (!participantTopWordsList) return;
+
+  if (!activeParticipantForWords) {
+    participantTopWordsList.innerHTML = '<li>No data yet</li>';
+    return;
+  }
+
+  const breakdown = currentStats.topWordsByParticipant?.[activeParticipantForWords] || [];
+  updateTopList(participantTopWordsList, breakdown, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
+}
+
+function renderParticipantWordBreakdown(currentStats) {
+  if (!participantWordSelector || !participantTopWordsList) return;
+
+  const participants = currentStats.participants;
+  if (!participants.length) {
+    participantWordSelector.innerHTML = '';
+    participantWordSelector.disabled = true;
+    activeParticipantForWords = null;
+    participantTopWordsList.innerHTML = '<li>No data yet</li>';
+    return;
+  }
+
+  const previousSelection = activeParticipantForWords;
+  activeParticipantForWords = previousSelection && participants.includes(previousSelection)
+    ? previousSelection
+    : participants[0];
+
+  participantWordSelector.innerHTML = participants
+    .map((participant) => `<option value="${participant}">${participant}</option>`)
+    .join('');
+  participantWordSelector.disabled = false;
+  participantWordSelector.value = activeParticipantForWords;
+
+  updateParticipantTopWordList(currentStats);
+}
+
 function renderStats(currentStats) {
   updateSummaryCards(currentStats);
   updateCharts(currentStats);
   updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
+  renderParticipantWordBreakdown(currentStats);
   updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
   buildInsights(currentStats);
 }
@@ -586,6 +628,17 @@ applyRangeButton.addEventListener('click', () => {
 resetRangeButton.addEventListener('click', () => {
   resetFilters();
   loadStatus.textContent = 'Filters reset to full range.';
+});
+
+participantWordSelector?.addEventListener('change', (event) => {
+  activeParticipantForWords = event.target.value || null;
+  if (!stats) {
+    if (participantTopWordsList) {
+      participantTopWordsList.innerHTML = '<li>No data yet</li>';
+    }
+    return;
+  }
+  updateParticipantTopWordList(stats);
 });
 
 generateMdButton.addEventListener('click', () => {
