@@ -296,6 +296,54 @@ button.subtle {
   color: var(--muted);
 }
 
+.response-times-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.response-times-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.response-threshold-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.response-threshold-control span {
+  white-space: nowrap;
+}
+
+.response-threshold-control select {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.response-threshold-control select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .response-time-list {
   list-style: none;
   padding: 0;

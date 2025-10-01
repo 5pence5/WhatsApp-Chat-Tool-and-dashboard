@@ -70,6 +70,40 @@ async function main() {
     throw new Error('Statistics should report at least one message.');
   }
 
+  const baseTimestamp = new Date('2024-01-01T08:00:00Z');
+  const makeMessage = (offsetMinutes, author, content) => ({
+    timestamp: new Date(baseTimestamp.getTime() + offsetMinutes * 60000),
+    author,
+    content,
+    type: 'message'
+  });
+
+  const thresholdSample = [
+    makeMessage(0, 'Alice', 'Morning!'),
+    makeMessage(5, 'Bob', 'Hey there'),
+    makeMessage(10, 'Alice', 'How is it going?'),
+    makeMessage(1210, 'Bob', 'Back online after a long break'),
+    makeMessage(1213, 'Alice', 'Welcome back'),
+    makeMessage(1217, 'Bob', 'Thanks!')
+  ];
+
+  const unlimitedStats = computeStatistics(thresholdSample, { responseThresholdMinutes: Number.POSITIVE_INFINITY });
+  const limitedStats = computeStatistics(thresholdSample, { responseThresholdMinutes: 60 });
+
+  if (!Number.isFinite(limitedStats.responseTimeThreshold) || limitedStats.responseTimeThreshold !== 60) {
+    throw new Error('Response time threshold should be recorded when computing statistics.');
+  }
+
+  const expectedLimitedBob = (5 + 4) / 2;
+  const bobLimited = limitedStats.responseTimes.Bob;
+  if (Math.abs(bobLimited - expectedLimitedBob) > 0.01) {
+    throw new Error('Gaps beyond the threshold should be excluded from average reply times.');
+  }
+
+  if (!(unlimitedStats.responseTimes.Bob > bobLimited)) {
+    throw new Error('Ignoring long gaps should reduce the computed average reply time.');
+  }
+
   const markdown = generateMarkdownSummary({
     title: 'Example Chat Recap',
     messages,
