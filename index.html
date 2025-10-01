@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Chat Insights Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+  <script type="module" src="js/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="branding">
+      <h1>WhatsApp Chat Insights Dashboard</h1>
+      <p>Upload your exported WhatsApp chat (.zip or .txt) to explore rich analytics and craft shareable summaries.</p>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="card upload-card" aria-labelledby="upload-title">
+      <div class="upload-header">
+        <h2 id="upload-title">Start with your chat export</h2>
+        <p>Select the exported <strong>.zip</strong> file from WhatsApp, or a plain text chat file.</p>
+      </div>
+      <label class="file-input" for="chat-file">
+        <input type="file" id="chat-file" accept=".zip,.txt" />
+        <span>Click to choose a file or drag it here</span>
+      </label>
+      <p class="helper-text" id="file-helper">No file selected.</p>
+      <div class="status" id="load-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card controls-card" aria-labelledby="filters-title">
+      <div class="controls-header">
+        <h2 id="filters-title">Filter &amp; focus</h2>
+        <p>Choose a time window to drill into specific periods of the conversation.</p>
+      </div>
+      <div class="controls-grid">
+        <label>
+          <span>Start date</span>
+          <input type="date" id="start-date" disabled />
+        </label>
+        <label>
+          <span>End date</span>
+          <input type="date" id="end-date" disabled />
+        </label>
+        <button id="apply-range" disabled>Apply date range</button>
+        <button id="reset-range" disabled class="subtle">Reset</button>
+      </div>
+    </section>
+
+    <section class="card stats-card" aria-labelledby="stats-title">
+      <div class="section-header">
+        <h2 id="stats-title">Conversation snapshot</h2>
+        <p>High-level metrics update instantly as you adjust filters.</p>
+      </div>
+      <div class="stats-grid" id="summary-cards"></div>
+    </section>
+
+    <section class="card charts-card" aria-labelledby="charts-title">
+      <div class="section-header">
+        <h2 id="charts-title">Activity highlights</h2>
+        <p>Compare participation and see when the conversation is most active.</p>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-block">
+          <h3>Messages per participant</h3>
+          <canvas id="participants-chart" aria-label="Messages per participant chart" role="img"></canvas>
+        </div>
+        <div class="chart-block">
+          <h3>Hourly rhythm</h3>
+          <canvas id="hourly-chart" aria-label="Messages by hour chart" role="img"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="card insights-card" aria-labelledby="insights-title">
+      <div class="section-header">
+        <h2 id="insights-title">Deeper insights</h2>
+        <p>Discover themes, emojis, and streaks that make this chat unique.</p>
+      </div>
+      <div class="insights-grid">
+        <div>
+          <h3>Top words</h3>
+          <ol id="top-words" class="pill-list"></ol>
+        </div>
+        <div>
+          <h3>Top emojis</h3>
+          <ol id="top-emojis" class="pill-list"></ol>
+        </div>
+        <div>
+          <h3>Response times</h3>
+          <ul id="response-times" class="response-list"></ul>
+        </div>
+        <div>
+          <h3>Noteworthy observations</h3>
+          <ul id="insight-list" class="insight-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card export-card" aria-labelledby="export-title">
+      <div class="section-header">
+        <h2 id="export-title">Export a Markdown recap</h2>
+        <p>Generate a polished summary for wikis, retros, or changelog entries.</p>
+      </div>
+      <div class="export-controls">
+        <label>
+          <span>Summary title</span>
+          <input type="text" id="md-title" placeholder="e.g. Sprint Retro – Team Chat Highlights" />
+        </label>
+        <label>
+          <span>Include sample messages</span>
+          <input type="number" id="sample-count" min="0" max="10" value="3" />
+        </label>
+        <button id="generate-md" disabled>Download Markdown</button>
+      </div>
+      <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Built for GitHub Pages · All processing happens in your browser · No data ever leaves your device.</p>
+  </footer>
+</body>
+</html>
