@@ -324,27 +324,45 @@ function updateResponseTimesList(currentStats) {
   const entries = currentStats.participants
     .map((participant, index) => {
       const value = currentStats.responseTimes?.[participant];
+      const hasMetrics = value && (typeof value.medianMinutes === 'number' || typeof value.averageMinutes === 'number');
+      const sortValue = hasMetrics
+        ? (typeof value.medianMinutes === 'number' ? value.medianMinutes : value.averageMinutes)
+        : null;
       return {
         participant,
-        minutes: typeof value === 'number' ? value : null,
+        metrics: hasMetrics ? value : null,
+        sortValue,
         order: index
       };
     })
     .sort((a, b) => {
-      if (a.minutes === null && b.minutes === null) {
+      if (a.sortValue === null && b.sortValue === null) {
         return a.order - b.order;
       }
-      if (a.minutes === null) return 1;
-      if (b.minutes === null) return -1;
-      if (a.minutes === b.minutes) {
+      if (a.sortValue === null) return 1;
+      if (b.sortValue === null) return -1;
+      if (a.sortValue === b.sortValue) {
         return a.participant.localeCompare(b.participant);
       }
-      return a.minutes - b.minutes;
+      return a.sortValue - b.sortValue;
     });
 
   responseTimesList.innerHTML = entries
-    .map(({ participant, minutes }) => {
-      const label = minutes === null ? '—' : `${formatter.format(minutes)} min`;
+    .map(({ participant, metrics }) => {
+      const label = (() => {
+        if (!metrics) return '—';
+        const parts = [];
+        if (typeof metrics.medianMinutes === 'number') {
+          parts.push(`median ${formatter.format(metrics.medianMinutes)} min`);
+        }
+        if (typeof metrics.averageMinutes === 'number') {
+          parts.push(`avg ${formatter.format(metrics.averageMinutes)} min`);
+        }
+        if (metrics.samples) {
+          parts.push(`${metrics.samples} sample${metrics.samples === 1 ? '' : 's'}`);
+        }
+        return parts.join(' · ');
+      })();
       return `
         <li>
           <span class="response-name">${participant}</span>
@@ -359,23 +377,25 @@ function updateResponseCutoffNote(currentStats) {
   if (!responseCutoffNote) return;
 
   if (!currentStats || typeof currentStats.totalMessages === 'undefined') {
-    responseCutoffNote.textContent = 'Average reply times will appear once a chat is loaded.';
+    responseCutoffNote.textContent = 'Reply time stats (avg & median) will appear once a chat is loaded.';
     return;
   }
 
   if (!currentStats.participants.length) {
-    responseCutoffNote.textContent = 'Average reply times will appear once participants start chatting.';
+    responseCutoffNote.textContent = 'Reply time stats (avg & median) will appear once participants start chatting.';
     return;
   }
 
-  const hasResponseData = Object.values(currentStats.responseTimes || {}).some((value) => typeof value === 'number');
+  const hasResponseData = Object.values(currentStats.responseTimes || {}).some((value) => value && (
+    typeof value.averageMinutes === 'number' || typeof value.medianMinutes === 'number'
+  ));
   const gap = currentStats.responseGapMinutes;
   const overnight = currentStats.responseGapOvernightBufferMinutes || 0;
 
   if (!gap) {
     responseCutoffNote.textContent = hasResponseData
       ? 'Counting every reply gap between different participants.'
-      : 'No qualifying reply gaps yet — once someone replies, times will appear here.';
+      : 'No qualifying reply gaps yet — once someone replies, reply time stats will appear here.';
     return;
   }
 
@@ -403,12 +423,27 @@ function buildInsights(currentStats) {
   if (currentStats.longestStreak > 1 && currentStats.longestStreakRange) {
     insights.push(`Longest daily streak: <strong>${currentStats.longestStreak} days</strong> from ${currentStats.longestStreakRange.start} to ${currentStats.longestStreakRange.end}.`);
   }
-    if (Object.keys(currentStats.responseTimes).length) {
-      const fastest = Object.entries(currentStats.responseTimes).sort((a, b) => a[1] - b[1])[0];
-      if (fastest) {
-        insights.push(`Quickest responder: <strong>${fastest[0]}</strong> with an average reply around ${fastest[1]} minutes.`);
-      }
+  if (Object.keys(currentStats.responseTimes).length) {
+    const sortable = Object.entries(currentStats.responseTimes)
+      .filter(([, data]) => data && (typeof data.medianMinutes === 'number' || typeof data.averageMinutes === 'number'))
+      .map(([name, data]) => ({
+        name,
+        data,
+        value: typeof data.medianMinutes === 'number' ? data.medianMinutes : data.averageMinutes
+      }))
+      .sort((a, b) => a.value - b.value);
+    const fastest = sortable[0];
+    if (fastest) {
+      const { data } = fastest;
+      const avgPart = typeof data.averageMinutes === 'number'
+        ? ` (avg ${data.averageMinutes.toFixed(1)} min)`
+        : '';
+      const displayValue = typeof data.medianMinutes === 'number'
+        ? data.medianMinutes.toFixed(1)
+        : data.averageMinutes?.toFixed(1);
+      insights.push(`Quickest responder: <strong>${fastest.name}</strong> with a median reply around ${displayValue} minutes${avgPart}.`);
     }
+  }
   if (!insights.length) {
     insights.push('Insights will appear here once you load a chat.');
   }
@@ -430,7 +465,7 @@ function enableControls(enabled) {
     el.disabled = !enabled;
   });
   if (!enabled && responseCutoffNote) {
-    responseCutoffNote.textContent = 'Average reply times will appear once a chat is loaded.';
+    responseCutoffNote.textContent = 'Reply time stats (avg & median) will appear once a chat is loaded.';
   }
   syncResponseControlState();
 }

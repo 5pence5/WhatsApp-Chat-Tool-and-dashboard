@@ -145,21 +145,23 @@ async function main() {
   ];
 
   const baselineResponse = computeStatistics(replyGapMessages);
-  if (typeof baselineResponse.responseTimes.Bob !== 'number') {
-    throw new Error('Expected Bob to have an average response time in the baseline statistics.');
+  const baselineBob = baselineResponse.responseTimes.Bob;
+  if (!baselineBob || typeof baselineBob.averageMinutes !== 'number' || typeof baselineBob.medianMinutes !== 'number') {
+    throw new Error('Expected Bob to have average and median response times in the baseline statistics.');
   }
 
-  if (baselineResponse.responseTimes.Bob <= 200) {
+  if (baselineBob.averageMinutes <= 200) {
     throw new Error('Expected long overnight gaps to skew averages when no cutoff is applied.');
   }
 
   const trimmedResponse = computeStatistics(replyGapMessages, { responseGapMinutes: 60 });
-  if (typeof trimmedResponse.responseTimes.Bob !== 'number') {
+  const trimmedBob = trimmedResponse.responseTimes.Bob;
+  if (!trimmedBob || typeof trimmedBob.averageMinutes !== 'number' || typeof trimmedBob.medianMinutes !== 'number') {
     throw new Error('Expected Bob to retain at least one qualifying response gap.');
   }
 
-  if (Math.abs(trimmedResponse.responseTimes.Bob - 10) > 0.01) {
-    throw new Error('Trimming long gaps should preserve the short 10-minute reply.');
+  if (Math.abs(trimmedBob.averageMinutes - 10) > 0.01 || Math.abs(trimmedBob.medianMinutes - 10) > 0.01) {
+    throw new Error('Trimming long gaps should preserve the short 10-minute reply for both average and median.');
   }
 
   if (trimmedResponse.responseGapMinutes !== 60) {
@@ -175,16 +177,43 @@ async function main() {
     overnightBufferMinutes: 480
   });
 
-  if (typeof bufferedResponse.responseTimes.Bob !== 'number') {
+  const bufferedBob = bufferedResponse.responseTimes.Bob;
+  if (!bufferedBob || typeof bufferedBob.averageMinutes !== 'number' || typeof bufferedBob.medianMinutes !== 'number') {
     throw new Error('Expected Bob to have an average when overnight buffer is applied.');
   }
 
-  if (Math.abs(bufferedResponse.responseTimes.Bob - baselineResponse.responseTimes.Bob) > 0.01) {
+  if (Math.abs(bufferedBob.averageMinutes - baselineBob.averageMinutes) > 0.01
+    || Math.abs(bufferedBob.medianMinutes - baselineBob.medianMinutes) > 0.01) {
     throw new Error('Overnight buffer should retain overnight replies within the extended allowance.');
   }
 
   if (bufferedResponse.responseGapOvernightBufferMinutes !== 480) {
     throw new Error('Expected overnight buffer setting to be surfaced in the statistics payload.');
+  }
+
+  const strictResponse = computeStatistics(replyGapMessages, { responseGapMinutes: 5 });
+  if (strictResponse.responseTimes.Bob) {
+    throw new Error('No qualifying gaps should leave response statistics empty for the participant.');
+  }
+
+  const medianTestMessages = [
+    { timestamp: new Date(2024, 0, 1, 8, 0), author: 'Alice', content: 'Start', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 8, 5), author: 'Bob', content: 'Reply 1', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 8, 15), author: 'Alice', content: 'Follow up', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 8, 25), author: 'Bob', content: 'Reply 2', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 8, 50), author: 'Alice', content: 'Another update', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 9, 5), author: 'Bob', content: 'Reply 3', type: 'message' }
+  ];
+
+  const medianStats = computeStatistics(medianTestMessages);
+  const bobStats = medianStats.responseTimes.Bob;
+  if (!bobStats || Math.abs(bobStats.averageMinutes - 10) > 0.01 || Math.abs(bobStats.medianMinutes - 10) > 0.01 || bobStats.samples !== 3) {
+    throw new Error('Expected Bob to have three samples with both average and median at 10 minutes.');
+  }
+
+  const aliceStats = medianStats.responseTimes.Alice;
+  if (!aliceStats || Math.abs(aliceStats.averageMinutes - 17.5) > 0.01 || Math.abs(aliceStats.medianMinutes - 17.5) > 0.01 || aliceStats.samples !== 2) {
+    throw new Error('Expected Alice to have two samples with both average and median at 17.5 minutes.');
   }
 
   console.log('Parsed messages:', messages.length);

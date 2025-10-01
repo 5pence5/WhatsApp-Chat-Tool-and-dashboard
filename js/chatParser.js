@@ -266,6 +266,16 @@ function round(value, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
+function median(values) {
+  if (!values || !values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
 export function computeStatistics(messages, options = {}) {
   const {
     responseGapMinutes,
@@ -385,10 +395,14 @@ export function computeStatistics(messages, options = {}) {
   const participants = Array.from(participantsSet).sort((a, b) => (messageCountByParticipant[b] || 0) - (messageCountByParticipant[a] || 0));
 
   for (const [author, deltas] of Object.entries(responseTracking)) {
-    if (deltas.length) {
-      const avg = deltas.reduce((acc, value) => acc + value, 0) / deltas.length;
-      responseTimes[author] = round(avg, 2);
-    }
+    if (!deltas.length) continue;
+    const avg = deltas.reduce((acc, value) => acc + value, 0) / deltas.length;
+    const med = median(deltas);
+    responseTimes[author] = {
+      averageMinutes: round(avg, 2),
+      medianMinutes: med === null ? null : round(med, 2),
+      samples: deltas.length
+    };
   }
 
   const topWords = Object.entries(words.reduce((acc, word) => {
@@ -557,7 +571,22 @@ export function generateMarkdownSummary({
     const bits = [`${participant}: **${count.toLocaleString()}** messages`];
     if (words) bits.push(`${words.toLocaleString()} words`);
     if (avgLength) bits.push(`avg length ${avgLength} chars`);
-    if (response) bits.push(`average response ≈ ${response} min`);
+    if (response) {
+      const { averageMinutes, medianMinutes, samples } = response;
+      const parts = [];
+      if (typeof medianMinutes === 'number') {
+        parts.push(`median ≈ ${medianMinutes.toLocaleString(undefined, { maximumFractionDigits: 2 })} min`);
+      }
+      if (typeof averageMinutes === 'number') {
+        parts.push(`avg ≈ ${averageMinutes.toLocaleString(undefined, { maximumFractionDigits: 2 })} min`);
+      }
+      if (samples) {
+        parts.push(`${samples} sample${samples === 1 ? '' : 's'}`);
+      }
+      if (parts.length) {
+        bits.push(parts.join(' · '));
+      }
+    }
     lines.push(`- ${bits.join(' · ')}`);
   }
 
