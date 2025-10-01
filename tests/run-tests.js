@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function loadExample() {
-  const zipPath = path.resolve(__dirname, '..', 'Example  WhatsApp Chat - Demosthenes Caldis 1.zip');
+  const zipPath = path.resolve(__dirname, '..', 'test.zip');
   const buffer = await readFile(zipPath);
   const zip = await JSZip.loadAsync(buffer);
   const chatEntry = Object.values(zip.files).find((file) => file.name.endsWith('.txt'));
@@ -25,9 +25,24 @@ async function main() {
     throw new Error('Parser failed to load messages from the example chat.');
   }
 
+  if (!messages.some((message) => message.content.includes('ec8s61tkc7gzvk4cim6a'))) {
+    throw new Error('Expected to find the generated WiFi password sample in the chat.');
+  }
+
   const stats = computeStatistics(messages);
   if (stats.participants.length < 2) {
     throw new Error('Expected at least two participants in the example chat.');
+  }
+
+  const expectedParticipants = ['~Ieommq', 'Imbl'];
+  for (const participant of expectedParticipants) {
+    if (!stats.participants.includes(participant)) {
+      throw new Error(`Expected participant ${participant} to be detected in the chat.`);
+    }
+  }
+
+  if (stats.totalMessages !== 11) {
+    throw new Error(`Example chat should contain 11 messages, found ${stats.totalMessages}.`);
   }
 
   if (stats.totalMessages <= 0) {
@@ -43,6 +58,10 @@ async function main() {
 
   if (!markdown.includes('# Example Chat Recap')) {
     throw new Error('Markdown summary did not include the custom title.');
+  }
+
+  if (!markdown.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
+    throw new Error('Markdown summary should include the detected timeframe of the new sample chat.');
   }
 
   console.log('Parsed messages:', messages.length);
