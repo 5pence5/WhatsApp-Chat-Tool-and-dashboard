@@ -296,6 +296,7 @@ export function computeStatistics(messages, options = {}) {
       messagesByHour: new Array(24).fill(0),
       topWords: [],
       topEmojis: [],
+      topWordsByParticipant: {},
       averageMessageLength: {},
       busiestDay: null,
       busiestHour: null,
@@ -312,6 +313,7 @@ export function computeStatistics(messages, options = {}) {
   const messageCountByParticipant = {};
   const wordCountByParticipant = {};
   const totalWordsByParticipant = {};
+  const wordFrequencyByParticipant = {};
   const longestMessageByParticipant = {};
   const messagesByDate = new Map();
   const messagesByHour = new Array(24).fill(0);
@@ -350,6 +352,9 @@ export function computeStatistics(messages, options = {}) {
     if (!(author in totalWordsByParticipant)) {
       totalWordsByParticipant[author] = 0;
     }
+    if (!(author in wordFrequencyByParticipant)) {
+      wordFrequencyByParticipant[author] = {};
+    }
     if (!(author in longestMessageByParticipant)) {
       longestMessageByParticipant[author] = null;
     }
@@ -372,6 +377,10 @@ export function computeStatistics(messages, options = {}) {
       totalWordsByParticipant[author] += content.length;
       totalWords += wordList.length;
       words.push(...wordList);
+      const frequency = wordFrequencyByParticipant[author];
+      for (const word of wordList) {
+        frequency[word] = (frequency[word] || 0) + 1;
+      }
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
         emojiCounts.set(emoji, (emojiCounts.get(emoji) || 0) + 1);
@@ -441,6 +450,18 @@ export function computeStatistics(messages, options = {}) {
     averageWordsPerMessage[participant] = count ? round(words / count, 1) : 0;
   }
 
+  const topWordsByParticipant = {};
+  for (const participant of participants) {
+    const entries = Object.entries(wordFrequencyByParticipant[participant] || {});
+    entries.sort((a, b) => {
+      if (b[1] !== a[1]) {
+        return b[1] - a[1];
+      }
+      return a[0].localeCompare(b[0]);
+    });
+    topWordsByParticipant[participant] = entries.slice(0, 10);
+  }
+
   const overallAverageWordsPerMessage = totalMessages ? round(totalWords / totalMessages, 1) : 0;
 
   const [firstMessageDate] = sortedMessages;
@@ -486,6 +507,7 @@ export function computeStatistics(messages, options = {}) {
     messagesByHour,
     topWords,
     topEmojis,
+    topWordsByParticipant,
     averageMessageLength,
     busiestDay,
     busiestHour,
