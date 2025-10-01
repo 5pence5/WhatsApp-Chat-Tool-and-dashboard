@@ -1,0 +1,11 @@
+{
+  "name": "whatsapp-chat-dashboard",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-tests.js"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}
