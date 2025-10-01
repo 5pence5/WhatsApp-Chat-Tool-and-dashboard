@@ -115,6 +115,31 @@ body {
   color: #f87171;
 }
 
+.date-format-chooser {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.date-format-chooser p {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.date-format-choices {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.date-format-choices button {
+  width: auto;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+}
+
 .controls-grid {
   display: grid;
   gap: 1rem;

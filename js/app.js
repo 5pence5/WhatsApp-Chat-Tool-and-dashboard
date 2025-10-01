@@ -11,10 +11,13 @@ let stats = null;
 let fullStats = null;
 let participantsChart = null;
 let hourlyChart = null;
+let activeDateFormat = 'DMY';
+let rawChatText = '';
 
 const fileInput = document.getElementById('chat-file');
 const fileHelper = document.getElementById('file-helper');
 const loadStatus = document.getElementById('load-status');
+const dateFormatChooser = document.createElement('div');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
 const applyRangeButton = document.getElementById('apply-range');
@@ -28,6 +31,11 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+
+dateFormatChooser.id = 'date-format-chooser';
+dateFormatChooser.className = 'date-format-chooser';
+dateFormatChooser.hidden = true;
+loadStatus.insertAdjacentElement('afterend', dateFormatChooser);
 
 async function loadChatFile(file) {
   if (!file) return null;
@@ -66,6 +74,50 @@ function formatDateFriendly(date) {
     month: 'short',
     day: 'numeric'
   }).format(date);
+}
+
+function describeDateFormat(format) {
+  return format === 'MDY' ? 'month/day/year' : 'day/month/year';
+}
+
+function hideDateFormatChooser() {
+  dateFormatChooser.hidden = true;
+  dateFormatChooser.innerHTML = '';
+}
+
+function renderDateFormatChooser(parseResult) {
+  if (!parseResult || !parseResult.ambiguous) {
+    hideDateFormatChooser();
+    return;
+  }
+
+  dateFormatChooser.hidden = false;
+  dateFormatChooser.innerHTML = '';
+
+  const info = document.createElement('p');
+  const currentDescription = describeDateFormat(parseResult.dateFormat);
+  info.innerHTML = `Dates could be interpreted multiple ways. Showing as <strong>${currentDescription}</strong>.`;
+  dateFormatChooser.appendChild(info);
+
+  const buttonGroup = document.createElement('div');
+  buttonGroup.className = 'date-format-choices';
+
+  ['DMY', 'MDY'].forEach((format) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = format === 'MDY' ? 'Use month/day/year' : 'Use day/month/year';
+    button.disabled = format === parseResult.dateFormat;
+    button.addEventListener('click', () => applyDateFormatOverride(format));
+    buttonGroup.appendChild(button);
+  });
+
+  dateFormatChooser.appendChild(buttonGroup);
+}
+
+function updateLoadSuccessMessage() {
+  if (!stats) return;
+  const description = describeDateFormat(activeDateFormat);
+  loadStatus.textContent = `Loaded ${stats.totalMessages.toLocaleString()} messages from ${stats.participants.length} participants (dates interpreted as ${description}).`;
 }
 
 function updateSummaryCards(currentStats) {
@@ -310,14 +362,76 @@ function resetFilters() {
   buildInsights(stats);
 }
 
+function processParsedChat(parseResult, options = {}) {
+  const { messages, dateFormat } = parseResult;
+  const { preserveFilters = false } = options;
+
+  if (!messages.length) {
+    throw new Error('No messages could be parsed. Please ensure this is a standard WhatsApp export.');
+  }
+
+  allMessages = messages;
+  filteredMessages = [...messages];
+  activeDateFormat = dateFormat;
+  fullStats = computeStatistics(messages);
+  stats = fullStats;
+
+  const firstDate = formatDateForInput(fullStats.firstMessageDate);
+  const lastDate = formatDateForInput(fullStats.lastMessageDate);
+
+  const clampDate = (value, min, max) => {
+    if (!value) return min;
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  };
+
+  startDateInput.min = firstDate;
+  startDateInput.max = lastDate;
+  endDateInput.min = firstDate;
+  endDateInput.max = lastDate;
+
+  if (preserveFilters) {
+    startDateInput.value = clampDate(startDateInput.value, firstDate, lastDate);
+    endDateInput.value = clampDate(endDateInput.value, firstDate, lastDate);
+    if (endDateInput.value < startDateInput.value) {
+      endDateInput.value = startDateInput.value;
+    }
+  } else {
+    startDateInput.value = firstDate;
+    endDateInput.value = lastDate;
+  }
+
+  enableControls(true);
+  applyFilters();
+
+  renderDateFormatChooser(parseResult);
+  loadStatus.classList.remove('error');
+  updateLoadSuccessMessage();
+}
+
+function applyDateFormatOverride(format) {
+  if (!rawChatText || format === activeDateFormat) return;
+
+  try {
+    const parseResult = parseChat(rawChatText, { dateFormat: format });
+    processParsedChat(parseResult, { preserveFilters: true });
+  } catch (error) {
+    console.error(error);
+    showError(error.message || 'Unable to apply the selected date format.');
+  }
+}
+
 function showError(message) {
   loadStatus.textContent = message;
   loadStatus.classList.add('error');
+  hideDateFormatChooser();
 }
 
 function clearStatus() {
   loadStatus.textContent = '';
   loadStatus.classList.remove('error');
+  hideDateFormatChooser();
 }
 
 function prepareMarkdown() {
@@ -354,31 +468,9 @@ fileInput.addEventListener('change', async (event) => {
   loadStatus.textContent = 'Parsing chat…';
 
   try {
-    const rawText = await loadChatFile(file);
-    allMessages = parseChat(rawText);
-
-    if (!allMessages.length) {
-      throw new Error('No messages could be parsed. Please ensure this is a standard WhatsApp export.');
-    }
-
-    fullStats = computeStatistics(allMessages);
-    stats = fullStats;
-    filteredMessages = [...allMessages];
-
-    const firstDate = formatDateForInput(fullStats.firstMessageDate);
-    const lastDate = formatDateForInput(fullStats.lastMessageDate);
-
-    startDateInput.value = firstDate;
-    startDateInput.min = firstDate;
-    startDateInput.max = lastDate;
-    endDateInput.value = lastDate;
-    endDateInput.min = firstDate;
-    endDateInput.max = lastDate;
-
-    enableControls(true);
-    applyFilters();
-
-    loadStatus.textContent = `Loaded ${stats.totalMessages.toLocaleString()} messages from ${stats.participants.length} participants.`;
+    rawChatText = await loadChatFile(file);
+    const parseResult = parseChat(rawChatText);
+    processParsedChat(parseResult);
   } catch (error) {
     console.error(error);
     showError(error.message || 'Something went wrong while parsing the chat.');

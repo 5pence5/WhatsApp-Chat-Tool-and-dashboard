@@ -20,7 +20,8 @@ async function loadExample() {
 
 async function main() {
   const rawText = await loadExample();
-  const messages = parseChat(rawText);
+  const parseResult = parseChat(rawText);
+  const { messages } = parseResult;
   if (!messages.length) {
     throw new Error('Parser failed to load messages from the example chat.');
   }
@@ -82,6 +83,58 @@ async function main() {
 
   if (!markdown.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
     throw new Error('Markdown summary should include the detected timeframe of the new sample chat.');
+  }
+
+  const ambiguousChat = [
+    '02/03/2024, 09:15 - Alice: Planning session',
+    '03/03/2024, 10:05 - Bob: Following up',
+    '04/03/2024, 11:20 - Alice: Notes shared',
+    '05/03/2024, 12:45 - Bob: Looks good',
+    '06/03/2024, 13:00 - Alice: Ready for launch',
+    '07/03/2024, 14:10 - Bob: Countdown continues',
+    '08/03/2024, 15:25 - Alice: Final checks',
+    '09/03/2024, 16:40 - Bob: Almost done',
+    '10/03/2024, 17:55 - Alice: Deploying now',
+    '11/03/2024, 18:30 - Bob: Deployment succeeded',
+    '12/03/2024, 19:15 - Alice: Retrospective tomorrow'
+  ].join('\n');
+
+  const ambiguousResult = parseChat(ambiguousChat);
+  if (!ambiguousResult.ambiguous) {
+    throw new Error('Expected ambiguous chat detection for the custom sample.');
+  }
+
+  if (ambiguousResult.dateFormat !== 'DMY') {
+    throw new Error('Ambiguous sample should default to day/month/year interpretation.');
+  }
+
+  if (!ambiguousResult.messages.length) {
+    throw new Error('Ambiguous sample should still yield parsed messages.');
+  }
+
+  const firstAmbiguousMonth = ambiguousResult.messages[0].timestamp.getUTCMonth();
+  if (firstAmbiguousMonth !== 2) {
+    throw new Error('DMY interpretation should treat 02/03 as March 2nd (month index 2).');
+  }
+
+  const alternativeResult = parseChat(ambiguousChat, { dateFormat: 'MDY' });
+  if (!alternativeResult.usedOverride) {
+    throw new Error('Override flag should be set when forcing a date format.');
+  }
+
+  const alternativeMonth = alternativeResult.messages[0].timestamp.getUTCMonth();
+  if (alternativeMonth !== 1) {
+    throw new Error('MDY interpretation should treat 02/03 as February 3rd (month index 1).');
+  }
+
+  const dmySpan = ambiguousResult.messages.at(-1).timestamp.getTime() - ambiguousResult.messages[0].timestamp.getTime();
+  const mdySpan = alternativeResult.messages.at(-1).timestamp.getTime() - alternativeResult.messages[0].timestamp.getTime();
+  if (dmySpan <= 0 || mdySpan <= 0) {
+    throw new Error('Span calculations should yield positive values for both interpretations.');
+  }
+
+  if (dmySpan >= mdySpan) {
+    throw new Error('DMY interpretation should result in a smaller overall timespan than MDY for the ambiguous sample.');
   }
 
   console.log('Parsed messages:', messages.length);
