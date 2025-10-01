@@ -34,6 +34,26 @@ async function main() {
     throw new Error('Expected at least two participants in the example chat.');
   }
 
+  const mediaPlaceholderMessage = {
+    timestamp: new Date(messages[0].timestamp.getTime() + 60000),
+    author: messages[0].author,
+    content: '<Media omitted>',
+    type: 'message'
+  };
+  const statsWithMedia = computeStatistics([...messages, mediaPlaceholderMessage]);
+
+  if (statsWithMedia.totalWords !== stats.totalWords) {
+    throw new Error('Media placeholder messages should not change the total word count.');
+  }
+
+  for (const participant of stats.participants) {
+    const before = stats.wordCountByParticipant[participant] || 0;
+    const after = statsWithMedia.wordCountByParticipant[participant] || 0;
+    if (before !== after) {
+      throw new Error(`Media placeholder messages should not change the word count for ${participant}.`);
+    }
+  }
+
   const expectedParticipants = ['~Ieommq', 'Imbl'];
   for (const participant of expectedParticipants) {
     if (!stats.participants.includes(participant)) {

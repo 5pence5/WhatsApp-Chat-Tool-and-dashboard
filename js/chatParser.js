@@ -233,16 +233,23 @@ export function computeStatistics(messages) {
     const author = message.author;
     participantsSet.add(author);
     messageCountByParticipant[author] = (messageCountByParticipant[author] || 0) + 1;
-    const wordList = extractWords(message.content);
-    wordCountByParticipant[author] = (wordCountByParticipant[author] || 0) + wordList.length;
-    totalWordsByParticipant[author] = (totalWordsByParticipant[author] || 0) + message.content.length;
+
+    if (!(author in wordCountByParticipant)) {
+      wordCountByParticipant[author] = 0;
+    }
+    if (!(author in totalWordsByParticipant)) {
+      totalWordsByParticipant[author] = 0;
+    }
 
     totalMessages += 1;
-    totalWords += wordList.length;
 
     if (isMediaMessage(message.content)) {
       mediaCount += 1;
     } else {
+      const wordList = extractWords(message.content);
+      wordCountByParticipant[author] += wordList.length;
+      totalWordsByParticipant[author] += message.content.length;
+      totalWords += wordList.length;
       words.push(...wordList);
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
