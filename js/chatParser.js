@@ -204,15 +204,15 @@ export function computeStatistics(messages) {
   let previousMessage = null;
 
   for (const message of sortedMessages) {
-    const dateKey = message.timestamp.toISOString().slice(0, 10);
-    messagesByDate.set(dateKey, (messagesByDate.get(dateKey) || 0) + 1);
-    messagesByHour[message.timestamp.getUTCHours()] += 1;
-
     if (message.type === 'system') {
       systemCount += 1;
       previousMessage = message;
       continue;
     }
+
+    const dateKey = message.timestamp.toISOString().slice(0, 10);
+    messagesByDate.set(dateKey, (messagesByDate.get(dateKey) || 0) + 1);
+    messagesByHour[message.timestamp.getUTCHours()] += 1;
 
     const author = message.author;
     participantsSet.add(author);
