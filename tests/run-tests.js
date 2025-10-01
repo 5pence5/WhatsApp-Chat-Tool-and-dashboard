@@ -7,6 +7,17 @@ import { parseChat, computeStatistics, generateMarkdownSummary, filterMessagesBy
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const stopWords = new Set([
+  'the', 'and', 'you', 'for', 'that', 'with', 'this', 'have', 'but', 'not', 'are', 'your', 'was', 'get', 'got', 'just', 'they',
+  'them', 'what', 'when', 'from', 'there', 'their', 'would', 'could', 'about', 'will', 'cant', 'dont', 'didnt', 'im', 'its',
+  'were', 'had', 'has', 'how', 'all', 'out', 'now', 'like', 'yeah', 'yes', 'she', 'his', 'her', 'who', 'him', 'our', 'one',
+  'why', 'too', 'wasnt', 'havent', 'into', 'then', 'than', 'ill', 'ive', 'did', 'okay', 'ok', 'sure', 'well', 'also', 'more',
+  'some', 'been', 'over', 'here', 'back', 'much', 'make', 'really', 'know', 'going', 'want', 'time', 'see', 'let', 'say',
+  'good', 'thanks', 'thank', 'thats', 'doesnt', 'aint', 'u', 'ur', 'lol', 'omg', 'lmfao', 'lmao', 'haha', 'hahaha', 'http',
+  'https', 'to', 'is', 'in', 'on', 'at', 'we', 'me', 'my', 'do', 'if', 'as', 'be', 'an', 'or', 'by', 'no', 'up', 'so', 'it',
+  'he', 'ya', 'oh', 'hadnt', 'should', 'ive', 'theyll', 'theyd', 'theirs', 'ours', 'mine', 'of', 'can'
+]);
+
 async function loadExample() {
   const zipPath = path.resolve(__dirname, '..', 'test.zip');
   const buffer = await readFile(zipPath);
@@ -16,6 +27,16 @@ async function loadExample() {
     throw new Error('Example archive does not contain a .txt file');
   }
   return chatEntry.async('string');
+}
+
+function extractWords(content = '') {
+  return content
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .split(/\s+/)
+    .map((word) => word.replace(/^'+|'+$/g, '').replace(/'/g, ''))
+    .filter((word) => word.length > 1 && !stopWords.has(word));
 }
 
 async function main() {
@@ -95,6 +116,61 @@ async function main() {
     }
   }
 
+  const participantWordFrequencies = new Map();
+  for (const message of messages) {
+    if (message.type !== 'message') continue;
+    if (isMediaPlaceholder(message.content)) continue;
+    const words = extractWords(message.content || '');
+    if (!words.length) continue;
+    if (!participantWordFrequencies.has(message.author)) {
+      participantWordFrequencies.set(message.author, new Map());
+    }
+    const authorMap = participantWordFrequencies.get(message.author);
+    for (const word of words) {
+      authorMap.set(word, (authorMap.get(word) || 0) + 1);
+    }
+  }
+
+  if (!stats.topWordsByParticipant || typeof stats.topWordsByParticipant !== 'object') {
+    throw new Error('Per-participant top word statistics should be returned.');
+  }
+
+  for (const participant of stats.participants) {
+    const reported = stats.topWordsByParticipant[participant] || [];
+    if (!Array.isArray(reported)) {
+      throw new Error(`Top words for ${participant} should be an array.`);
+    }
+
+    const expectedEntries = Array.from(participantWordFrequencies.get(participant)?.entries() || [])
+      .sort((a, b) => {
+        if (a[1] === b[1]) {
+          return a[0].localeCompare(b[0]);
+        }
+        return b[1] - a[1];
+      });
+
+    const expectedLength = Math.min(10, expectedEntries.length);
+    if (reported.length !== expectedLength) {
+      throw new Error(`Expected ${expectedLength} top words for ${participant}, received ${reported.length}.`);
+    }
+
+    for (let index = 0; index < reported.length; index += 1) {
+      const [word, count] = reported[index];
+      const [expectedWord, expectedCount] = expectedEntries[index];
+      if (word !== expectedWord || count !== expectedCount) {
+        throw new Error(`Unexpected top word for ${participant} at position ${index + 1}.`);
+      }
+    }
+
+    if (expectedEntries.length > 10 && reported.length) {
+      const [, lastCount] = reported[reported.length - 1];
+      const [, nextCount] = expectedEntries[reported.length];
+      if (nextCount > lastCount) {
+        throw new Error(`Only the highest-frequency words should appear for ${participant}.`);
+      }
+    }
+  }
+
   const mediaPlaceholderMessage = {
     timestamp: new Date(messages[0].timestamp.getTime() + 60000),
     author: messages[0].author,
@@ -136,6 +212,11 @@ async function main() {
     const after = statsWithMedia.wordCountByParticipant[participant] || 0;
     if (before !== after) {
       throw new Error(`Media placeholder messages should not change the word count for ${participant}.`);
+    }
+    const beforeTop = JSON.stringify(stats.topWordsByParticipant?.[participant] || []);
+    const afterTop = JSON.stringify(statsWithMedia.topWordsByParticipant?.[participant] || []);
+    if (beforeTop !== afterTop) {
+      throw new Error(`Media placeholder messages should not change the top words for ${participant}.`);
     }
   }
 

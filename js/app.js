@@ -25,6 +25,8 @@ const applyRangeButton = document.getElementById('apply-range');
 const resetRangeButton = document.getElementById('reset-range');
 const summaryCardsContainer = document.getElementById('summary-cards');
 const topWordsList = document.getElementById('top-words');
+const participantWordSelect = document.getElementById('participant-word-select');
+const participantTopWordsList = document.getElementById('participant-top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
@@ -37,6 +39,8 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+
+let selectedParticipantForWords = null;
 
 dateFormatChooser.id = 'date-format-chooser';
 dateFormatChooser.className = 'date-format-chooser';
@@ -455,9 +459,9 @@ function updateCharts(currentStats) {
   });
 }
 
-function updateTopList(container, items, formatter) {
+function updateTopList(container, items, formatter, emptyMessage = 'No data yet') {
   if (!items.length) {
-    container.innerHTML = '<li>No data yet</li>';
+    container.innerHTML = `<li>${emptyMessage}</li>`;
     return;
   }
 
@@ -510,12 +514,55 @@ function renderLongestMessages(currentStats) {
   longestMessagesList.innerHTML = entries.join('');
 }
 
+function renderParticipantWordBreakdown(currentStats) {
+  if (!participantWordSelect || !participantTopWordsList) return;
+
+  const participants = currentStats.participants || [];
+  participantWordSelect.innerHTML = '';
+
+  if (!participants.length) {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'No participants yet';
+    participantWordSelect.appendChild(placeholder);
+    participantWordSelect.disabled = true;
+    participantTopWordsList.innerHTML = '<li>No participants yet</li>';
+    selectedParticipantForWords = null;
+    return;
+  }
+
+  const previousSelection = selectedParticipantForWords;
+  const nextSelection = previousSelection && participants.includes(previousSelection)
+    ? previousSelection
+    : participants[0];
+  selectedParticipantForWords = nextSelection;
+
+  participants.forEach((participant) => {
+    const option = document.createElement('option');
+    option.value = participant;
+    option.textContent = participant;
+    participantWordSelect.appendChild(option);
+  });
+
+  participantWordSelect.disabled = false;
+  participantWordSelect.value = nextSelection;
+
+  const entries = currentStats.topWordsByParticipant?.[nextSelection] || [];
+  updateTopList(
+    participantTopWordsList,
+    entries,
+    ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`,
+    'No words yet'
+  );
+}
+
 function renderStats(currentStats) {
   updateSummaryCards(currentStats);
   updateCharts(currentStats);
-  updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
-  updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
+  updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`);
+  updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${escapeHtml(emoji)}</span><span>${count}</span>`);
   renderLongestMessages(currentStats);
+  renderParticipantWordBreakdown(currentStats);
   buildInsights(currentStats);
 }
 
@@ -805,6 +852,13 @@ resetRangeButton.addEventListener('click', () => {
   loadStatus.textContent = 'Filters reset to full range.';
 });
 
+participantWordSelect?.addEventListener('change', (event) => {
+  selectedParticipantForWords = event.target.value || null;
+  if (stats) {
+    renderParticipantWordBreakdown(stats);
+  }
+});
+
 generateMdButton.addEventListener('click', () => {
   prepareMarkdown();
   loadStatus.textContent = 'Markdown summary generated!';
@@ -829,4 +883,7 @@ document.addEventListener('drop', async (event) => {
 window.addEventListener('DOMContentLoaded', () => {
   enableControls(false);
   mdPreview.value = '';
+  if (participantTopWordsList) {
+    participantTopWordsList.innerHTML = '<li>No participants yet</li>';
+  }
 });

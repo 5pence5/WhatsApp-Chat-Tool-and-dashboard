@@ -157,6 +157,7 @@ body {
 input[type="date"],
 input[type="text"],
 input[type="number"],
+select,
 button,
 textarea {
   width: 100%;
@@ -262,6 +263,28 @@ button.subtle {
   gap: 1.5rem;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   margin-top: 1.5rem;
+}
+
+.participant-word-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.participant-word-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--muted);
+}
+
+.participant-word-label span {
+  font-size: 0.9rem;
+}
+
+.participant-word-label select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pill-list {
