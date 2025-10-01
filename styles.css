@@ -286,6 +286,54 @@ button.subtle {
   font-weight: 500;
 }
 
+.longest-message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.longest-message-list li {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.longest-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.longest-message-header .participant-name {
+  color: var(--text);
+}
+
+.longest-message-header .message-length {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.longest-message-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.longest-message-snippet {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
 .insight-list {
   list-style: disc;
   padding-left: 1.25rem;

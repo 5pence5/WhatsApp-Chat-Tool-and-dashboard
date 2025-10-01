@@ -27,6 +27,7 @@ const topWordsList = document.getElementById('top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
+const longestMessagesList = document.getElementById('longest-messages');
 const responseGapInput = document.getElementById('response-gap-limit');
 const responseOvernightToggle = document.getElementById('response-overnight-toggle');
 const responseOvernightMinutesInput = document.getElementById('response-overnight-minutes');
@@ -80,8 +81,41 @@ function formatDateFriendly(date) {
   }).format(date);
 }
 
+function formatDateTimeFriendly(date) {
+  if (!date) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(date);
+}
+
 function describeDateFormat(format) {
   return format === 'MDY' ? 'month/day/year' : 'day/month/year';
+}
+
+function escapeHtml(text) {
+  if (text === null || typeof text === 'undefined') {
+    return '';
+  }
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatSnippet(text) {
+  if (!text) return '—';
+  const flattened = text.replace(/\s+/g, ' ').trim();
+  if (!flattened) return '—';
+  if (flattened.length <= 160) {
+    return flattened;
+  }
+  return `${flattened.slice(0, 157)}…`;
 }
 
 function getResponseOptions() {
@@ -294,11 +328,56 @@ function updateTopList(container, items, formatter) {
     .join('');
 }
 
+function renderLongestMessages(currentStats) {
+  if (!longestMessagesList) return;
+
+  if (!currentStats.participants.length) {
+    longestMessagesList.innerHTML = '<li class="empty">No participants yet</li>';
+    return;
+  }
+
+  const entries = currentStats.participants.map((participant) => {
+    const record = currentStats.longestMessageByParticipant?.[participant];
+    if (!record) {
+      return `
+        <li>
+          <div class="longest-message-header">
+            <span class="participant-name">${escapeHtml(participant)}</span>
+            <span class="message-length">No qualifying message</span>
+          </div>
+          <div class="longest-message-meta">—</div>
+          <p class="longest-message-snippet">No qualifying messages yet.</p>
+        </li>
+      `;
+    }
+
+    const descriptor = record.wordCount
+      ? `${record.wordCount.toLocaleString()} ${record.wordCount === 1 ? 'word' : 'words'}`
+      : `${record.charCount.toLocaleString()} chars`;
+    const timestampLabel = formatDateTimeFriendly(record.timestamp instanceof Date ? record.timestamp : new Date(record.timestamp));
+    const snippet = formatSnippet(record.content);
+
+    return `
+      <li>
+        <div class="longest-message-header">
+          <span class="participant-name">${escapeHtml(participant)}</span>
+          <span class="message-length">${escapeHtml(descriptor)}</span>
+        </div>
+        <div class="longest-message-meta">${escapeHtml(timestampLabel)}</div>
+        <p class="longest-message-snippet">${escapeHtml(snippet)}</p>
+      </li>
+    `;
+  });
+
+  longestMessagesList.innerHTML = entries.join('');
+}
+
 function renderStats(currentStats) {
   updateSummaryCards(currentStats);
   updateCharts(currentStats);
   updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${word}</span><span>${count}</span>`);
   updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${emoji}</span><span>${count}</span>`);
+  renderLongestMessages(currentStats);
   buildInsights(currentStats);
 }
 
@@ -403,12 +482,12 @@ function buildInsights(currentStats) {
   if (currentStats.longestStreak > 1 && currentStats.longestStreakRange) {
     insights.push(`Longest daily streak: <strong>${currentStats.longestStreak} days</strong> from ${currentStats.longestStreakRange.start} to ${currentStats.longestStreakRange.end}.`);
   }
-    if (Object.keys(currentStats.responseTimes).length) {
-      const fastest = Object.entries(currentStats.responseTimes).sort((a, b) => a[1] - b[1])[0];
-      if (fastest) {
-        insights.push(`Quickest responder: <strong>${fastest[0]}</strong> with an average reply around ${fastest[1]} minutes.`);
-      }
+  if (Object.keys(currentStats.responseTimes).length) {
+    const fastest = Object.entries(currentStats.responseTimes).sort((a, b) => a[1] - b[1])[0];
+    if (fastest) {
+      insights.push(`Quickest responder: <strong>${fastest[0]}</strong> with an average reply around ${fastest[1]} minutes.`);
     }
+  }
   if (!insights.length) {
     insights.push('Insights will appear here once you load a chat.');
   }
