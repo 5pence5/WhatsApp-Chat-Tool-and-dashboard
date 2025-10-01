@@ -266,6 +266,16 @@ function round(value, digits = 1) {
   return Math.round(value * factor) / factor;
 }
 
+function calculateMedian(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[mid];
+  }
+  return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 export function computeStatistics(messages, options = {}) {
   const {
     responseGapMinutes,
@@ -421,7 +431,12 @@ export function computeStatistics(messages, options = {}) {
   for (const [author, deltas] of Object.entries(responseTracking)) {
     if (deltas.length) {
       const avg = deltas.reduce((acc, value) => acc + value, 0) / deltas.length;
-      responseTimes[author] = round(avg, 2);
+      const median = calculateMedian(deltas);
+      responseTimes[author] = {
+        averageMinutes: round(avg, 2),
+        medianMinutes: round(median, 2),
+        samples: deltas.length
+      };
     }
   }
 
@@ -611,7 +626,26 @@ export function generateMarkdownSummary({
       bits.push(`${wordsPerMessage.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} words/msg`);
     }
     if (avgLength) bits.push(`avg length ${avgLength} chars`);
-    if (response) bits.push(`average response ≈ ${response} min`);
+    const hasAverageResponse = typeof response?.averageMinutes === 'number';
+    const hasMedianResponse = typeof response?.medianMinutes === 'number';
+    if (hasAverageResponse || hasMedianResponse) {
+      const formatMinutes = (value) => value.toLocaleString(undefined, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      });
+      const segments = [];
+      if (hasAverageResponse) {
+        segments.push(`avg ≈ ${formatMinutes(response.averageMinutes)} min`);
+      }
+      if (hasMedianResponse) {
+        segments.push(`median ≈ ${formatMinutes(response.medianMinutes)} min`);
+      }
+      const sampleCount = typeof response?.samples === 'number' ? response.samples : 0;
+      const sampleSuffix = sampleCount > 0
+        ? ` (from ${sampleCount} gap${sampleCount === 1 ? '' : 's'})`
+        : '';
+      bits.push(`response ${segments.join(' · ')}${sampleSuffix}`);
+    }
     if (longest) {
       const descriptor = longest.wordCount
         ? `${longest.wordCount} ${longest.wordCount === 1 ? 'word' : 'words'}`

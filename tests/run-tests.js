@@ -233,21 +233,23 @@ async function main() {
   ];
 
   const baselineResponse = computeStatistics(replyGapMessages);
-  if (typeof baselineResponse.responseTimes.Bob !== 'number') {
-    throw new Error('Expected Bob to have an average response time in the baseline statistics.');
+  const baselineMetrics = baselineResponse.responseTimes.Bob;
+  if (!baselineMetrics || typeof baselineMetrics.averageMinutes !== 'number' || typeof baselineMetrics.medianMinutes !== 'number') {
+    throw new Error('Expected Bob to have average and median response times in the baseline statistics.');
   }
 
-  if (baselineResponse.responseTimes.Bob <= 200) {
-    throw new Error('Expected long overnight gaps to skew averages when no cutoff is applied.');
+  if (baselineMetrics.averageMinutes <= 200 || baselineMetrics.medianMinutes <= 200) {
+    throw new Error('Expected long overnight gaps to skew averages and medians when no cutoff is applied.');
   }
 
   const trimmedResponse = computeStatistics(replyGapMessages, { responseGapMinutes: 60 });
-  if (typeof trimmedResponse.responseTimes.Bob !== 'number') {
-    throw new Error('Expected Bob to retain at least one qualifying response gap.');
+  const trimmedMetrics = trimmedResponse.responseTimes.Bob;
+  if (!trimmedMetrics || typeof trimmedMetrics.averageMinutes !== 'number' || typeof trimmedMetrics.medianMinutes !== 'number') {
+    throw new Error('Expected Bob to retain average and median metrics after applying a cutoff.');
   }
 
-  if (Math.abs(trimmedResponse.responseTimes.Bob - 10) > 0.01) {
-    throw new Error('Trimming long gaps should preserve the short 10-minute reply.');
+  if (Math.abs(trimmedMetrics.averageMinutes - 10) > 0.01 || Math.abs(trimmedMetrics.medianMinutes - 10) > 0.01) {
+    throw new Error('Trimming long gaps should preserve the short 10-minute reply in both average and median calculations.');
   }
 
   if (trimmedResponse.responseGapMinutes !== 60) {
@@ -263,16 +265,73 @@ async function main() {
     overnightBufferMinutes: 480
   });
 
-  if (typeof bufferedResponse.responseTimes.Bob !== 'number') {
-    throw new Error('Expected Bob to have an average when overnight buffer is applied.');
+  const bufferedMetrics = bufferedResponse.responseTimes.Bob;
+  if (!bufferedMetrics || typeof bufferedMetrics.averageMinutes !== 'number' || typeof bufferedMetrics.medianMinutes !== 'number') {
+    throw new Error('Expected Bob to have average and median metrics when overnight buffer is applied.');
   }
 
-  if (Math.abs(bufferedResponse.responseTimes.Bob - baselineResponse.responseTimes.Bob) > 0.01) {
-    throw new Error('Overnight buffer should retain overnight replies within the extended allowance.');
+  if (Math.abs(bufferedMetrics.averageMinutes - baselineMetrics.averageMinutes) > 0.01
+    || Math.abs(bufferedMetrics.medianMinutes - baselineMetrics.medianMinutes) > 0.01) {
+    throw new Error('Overnight buffer should retain overnight replies within the extended allowance for both average and median.');
   }
 
   if (bufferedResponse.responseGapOvernightBufferMinutes !== 480) {
     throw new Error('Expected overnight buffer setting to be surfaced in the statistics payload.');
+  }
+
+  const medianTestMessages = [
+    { timestamp: new Date(2024, 0, 1, 10, 0), author: 'Charlie', content: 'Ping', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 5), author: 'Dana', content: 'Reply 1', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 9), author: 'Charlie', content: 'Follow up', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 15), author: 'Dana', content: 'Reply 2', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 18), author: 'Charlie', content: 'Check in', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 19), author: 'Dana', content: 'Reply 3', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 10, 25), author: 'Charlie', content: 'Wrap up', type: 'message' }
+  ];
+
+  const medianStats = computeStatistics(medianTestMessages);
+  const charlieMetrics = medianStats.responseTimes.Charlie;
+  const danaMetrics = medianStats.responseTimes.Dana;
+
+  if (!charlieMetrics || charlieMetrics.samples !== 3) {
+    throw new Error('Expected Charlie to report three qualifying gaps.');
+  }
+  if (!danaMetrics || danaMetrics.samples !== 3) {
+    throw new Error('Expected Dana to report three qualifying gaps.');
+  }
+
+  if (Math.abs(charlieMetrics.medianMinutes - 4) > 0.01 || Math.abs(charlieMetrics.averageMinutes - (13 / 3)) > 0.01) {
+    throw new Error('Charlie median/average reply times should reflect odd-sized samples.');
+  }
+  if (Math.abs(danaMetrics.medianMinutes - 5) > 0.01 || Math.abs(danaMetrics.averageMinutes - 4) > 0.01) {
+    throw new Error('Dana median/average reply times should reflect odd-sized samples.');
+  }
+
+  const trimmedMedianStats = computeStatistics(medianTestMessages, { responseGapMinutes: 5 });
+  const trimmedCharlie = trimmedMedianStats.responseTimes.Charlie;
+  const trimmedDana = trimmedMedianStats.responseTimes.Dana;
+
+  if (!trimmedCharlie || trimmedCharlie.samples !== 2) {
+    throw new Error('Charlie should retain two qualifying gaps after applying a cutoff.');
+  }
+  if (!trimmedDana || trimmedDana.samples !== 2) {
+    throw new Error('Dana should retain two qualifying gaps after applying a cutoff.');
+  }
+
+  if (Math.abs(trimmedCharlie.medianMinutes - 3.5) > 0.01 || Math.abs(trimmedCharlie.averageMinutes - 3.5) > 0.01) {
+    throw new Error('Charlie median/average should reflect even-sized samples when trimmed.');
+  }
+  if (Math.abs(trimmedDana.medianMinutes - 3) > 0.01 || Math.abs(trimmedDana.averageMinutes - 3) > 0.01) {
+    throw new Error('Dana median/average should reflect even-sized samples when trimmed.');
+  }
+
+  const soloMessages = [
+    { timestamp: new Date(2024, 0, 1, 9, 0), author: 'Solo', content: 'Hello there', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 9, 5), author: 'Solo', content: 'Still here', type: 'message' }
+  ];
+  const soloStats = computeStatistics(soloMessages);
+  if (soloStats.responseTimes.Solo) {
+    throw new Error('Participants without alternating replies should not report response metrics.');
   }
 
   const filterableMessages = [
