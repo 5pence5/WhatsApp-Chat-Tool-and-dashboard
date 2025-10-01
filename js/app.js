@@ -47,7 +47,10 @@ async function loadChatFile(file) {
 
 function formatDateForInput(date) {
   if (!date) return '';
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDateFriendly(date) {
@@ -249,7 +252,8 @@ function buildInsights(currentStats) {
     insights.push(`Most active day: <strong>${currentStats.busiestDay.date}</strong> with ${currentStats.busiestDay.count} messages.`);
   }
   if (currentStats.busiestHour !== null) {
-    insights.push(`Peak hour: <strong>${currentStats.busiestHour}:00</strong> (UTC) when the chat is most lively.`);
+    const hourLabel = String(currentStats.busiestHour).padStart(2, '0');
+    insights.push(`Peak hour: <strong>${hourLabel}:00</strong> when the chat is most lively.`);
   }
   if (currentStats.longestStreak > 1 && currentStats.longestStreakRange) {
     insights.push(`Longest daily streak: <strong>${currentStats.longestStreak} days</strong> from ${currentStats.longestStreakRange.start} to ${currentStats.longestStreakRange.end}.`);

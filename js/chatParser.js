@@ -75,7 +75,23 @@ function parseDate(day, month, year, timeStr, format) {
     }
   }
 
-  return new Date(Date.UTC(y, m - 1, d, hours, minutes, seconds));
+  return new Date(y, m - 1, d, hours, minutes, seconds);
+}
+
+function formatLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalDateTime(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
 function normaliseAuthor(author) {
@@ -210,9 +226,9 @@ export function computeStatistics(messages) {
       continue;
     }
 
-    const dateKey = message.timestamp.toISOString().slice(0, 10);
+    const dateKey = formatLocalDateKey(message.timestamp);
     messagesByDate.set(dateKey, (messagesByDate.get(dateKey) || 0) + 1);
-    messagesByHour[message.timestamp.getUTCHours()] += 1;
+    messagesByHour[message.timestamp.getHours()] += 1;
 
     const author = message.author;
     participantsSet.add(author);
@@ -353,17 +369,26 @@ function calculateStreaks(messagesByDate) {
   return { length: bestLength, range: bestRange };
 }
 
+function parseDateInput(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map((part) => parseInt(part, 10));
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return null;
+  }
+  return new Date(year, month - 1, day);
+}
+
 export function filterMessagesByDate(messages, startDate, endDate) {
   if (!startDate && !endDate) return [...messages];
-  const start = startDate ? new Date(startDate) : null;
-  const end = endDate ? new Date(endDate) : null;
+  const start = parseDateInput(startDate);
+  const end = parseDateInput(endDate);
 
   return messages.filter((message) => {
     const ts = message.timestamp;
-    if (start && ts < new Date(start.getTime())) return false;
+    if (start && ts < start) return false;
     if (end) {
       const endOfDay = new Date(end.getTime());
-      endOfDay.setUTCHours(23, 59, 59, 999);
+      endOfDay.setHours(23, 59, 59, 999);
       if (ts > endOfDay) return false;
     }
     return true;
@@ -383,7 +408,7 @@ export function generateMarkdownSummary({
   const dateLine = startDate && endDate
     ? `**Timeframe:** ${startDate} → ${endDate}`
     : stats.firstMessageDate && stats.lastMessageDate
-      ? `**Timeframe:** ${stats.firstMessageDate.toISOString().slice(0, 10)} → ${stats.lastMessageDate.toISOString().slice(0, 10)}`
+      ? `**Timeframe:** ${formatLocalDateKey(stats.firstMessageDate)} → ${formatLocalDateKey(stats.lastMessageDate)}`
       : null;
   if (dateLine) lines.push(dateLine);
 
@@ -433,7 +458,7 @@ export function generateMarkdownSummary({
     const step = Math.max(1, Math.floor(messages.length / sampleCount));
     for (let i = 0; i < sampleCount && i * step < messages.length; i += 1) {
       const message = messages[i * step];
-      const date = message.timestamp.toISOString().replace('T', ' ').slice(0, 16);
+      const date = formatLocalDateTime(message.timestamp);
       lines.push(`- ${date} · **${message.author}:** ${message.content.replace(/\n/g, ' ')}`);
     }
   }
