@@ -35,7 +35,13 @@ async function loadChatFile(file) {
   if (file.name.toLowerCase().endsWith('.zip')) {
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
-    const txtFileName = Object.keys(zip.files).find((name) => name.endsWith('.txt'));
+    const txtFileName = Object.keys(zip.files).find((name) => {
+      const baseName = name.split('/').pop() || name;
+      if (baseName.startsWith('._')) {
+        return false;
+      }
+      return baseName.toLowerCase().endsWith('.txt');
+    });
     if (!txtFileName) {
       throw new Error('No .txt file found inside the zip archive.');
     }
