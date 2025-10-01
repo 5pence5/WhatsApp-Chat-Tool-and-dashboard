@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { parseChat, computeStatistics, generateMarkdownSummary } from '../js/chatParser.js';
+import { parseChat, computeStatistics, generateMarkdownSummary, filterMessagesByDate } from '../js/chatParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,6 +47,30 @@ async function main() {
     throw new Error('Media placeholder messages should not change the total word count.');
   }
 
+  const roundToTenth = (value) => Math.round(value * 10) / 10;
+
+  const ensureAveragesMatchCounts = (currentStats) => {
+    for (const participant of currentStats.participants) {
+      const wordCount = currentStats.wordCountByParticipant[participant] || 0;
+      const messageCount = currentStats.messageCountByParticipant[participant] || 0;
+      const expectedAverage = messageCount ? roundToTenth(wordCount / messageCount) : 0;
+      const reportedAverage = currentStats.averageWordsPerMessage?.[participant] ?? null;
+      if (reportedAverage !== expectedAverage) {
+        throw new Error(`Average words per message for ${participant} should be ${expectedAverage}, got ${reportedAverage}.`);
+      }
+    }
+
+    const expectedOverall = currentStats.totalMessages
+      ? roundToTenth(currentStats.totalWords / currentStats.totalMessages)
+      : 0;
+    if (currentStats.overallAverageWordsPerMessage !== expectedOverall) {
+      throw new Error(`Overall average words per message should be ${expectedOverall}, got ${currentStats.overallAverageWordsPerMessage}.`);
+    }
+  };
+
+  ensureAveragesMatchCounts(stats);
+  ensureAveragesMatchCounts(statsWithMedia);
+
   for (const participant of stats.participants) {
     const before = stats.wordCountByParticipant[participant] || 0;
     const after = statsWithMedia.wordCountByParticipant[participant] || 0;
@@ -83,6 +107,10 @@ async function main() {
 
   if (!markdown.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
     throw new Error('Markdown summary should include the detected timeframe of the new sample chat.');
+  }
+
+  if (!markdown.includes('words/msg')) {
+    throw new Error('Markdown summary should surface average words per message.');
   }
 
   const ambiguousChat = [
@@ -185,6 +213,24 @@ async function main() {
 
   if (bufferedResponse.responseGapOvernightBufferMinutes !== 480) {
     throw new Error('Expected overnight buffer setting to be surfaced in the statistics payload.');
+  }
+
+  const filterableMessages = [
+    { timestamp: new Date(2024, 4, 1, 9, 0), author: 'Alpha', content: 'Falcon zephyr', type: 'message' },
+    { timestamp: new Date(2024, 4, 2, 9, 30), author: 'Alpha', content: 'Quartz galaxy nebula', type: 'message' },
+    { timestamp: new Date(2024, 4, 2, 10, 0), author: 'Beta', content: 'Meteor aurora', type: 'message' }
+  ];
+
+  const filterStats = computeStatistics(filterableMessages);
+  ensureAveragesMatchCounts(filterStats);
+
+  const filteredSubset = filterMessagesByDate(filterableMessages, '2024-05-02', '2024-05-02');
+  const filteredStats = computeStatistics(filteredSubset);
+  ensureAveragesMatchCounts(filteredStats);
+
+  const alphaAverage = filteredStats.averageWordsPerMessage.Alpha;
+  if (alphaAverage !== roundToTenth(3 / 1)) {
+    throw new Error('Filtered averages should recalculate when narrowing the date range.');
   }
 
   console.log('Parsed messages:', messages.length);

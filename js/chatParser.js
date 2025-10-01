@@ -283,9 +283,11 @@ export function computeStatistics(messages, options = {}) {
     return {
       totalMessages: 0,
       totalWords: 0,
+      overallAverageWordsPerMessage: 0,
       participants: [],
       messageCountByParticipant: {},
       wordCountByParticipant: {},
+      averageWordsPerMessage: {},
       mediaCount: 0,
       systemCount: 0,
       firstMessageDate: null,
@@ -399,10 +401,15 @@ export function computeStatistics(messages, options = {}) {
   const topEmojis = Array.from(emojiCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   const averageMessageLength = {};
+  const averageWordsPerMessage = {};
   for (const participant of participants) {
     const count = messageCountByParticipant[participant] || 0;
     averageMessageLength[participant] = count ? round(totalWordsByParticipant[participant] / count, 1) : 0;
+    const words = wordCountByParticipant[participant] || 0;
+    averageWordsPerMessage[participant] = count ? round(words / count, 1) : 0;
   }
+
+  const overallAverageWordsPerMessage = totalMessages ? round(totalWords / totalMessages, 1) : 0;
 
   const [firstMessageDate] = sortedMessages;
   const lastMessageDate = sortedMessages[sortedMessages.length - 1];
@@ -434,9 +441,11 @@ export function computeStatistics(messages, options = {}) {
   return {
     totalMessages,
     totalWords,
+    overallAverageWordsPerMessage,
     participants,
     messageCountByParticipant,
     wordCountByParticipant,
+    averageWordsPerMessage,
     mediaCount,
     systemCount,
     firstMessageDate: firstMessageDate?.timestamp ?? null,
@@ -541,6 +550,13 @@ export function generateMarkdownSummary({
   if (stats.mediaCount) {
     lines.push(`- **Media shared:** ${stats.mediaCount}`);
   }
+  if (typeof stats.overallAverageWordsPerMessage === 'number' && stats.overallAverageWordsPerMessage > 0) {
+    const formattedAverage = stats.overallAverageWordsPerMessage.toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+    lines.push(`- **Average words per message:** ${formattedAverage}`);
+  }
   if (stats.topWords.length) {
     lines.push(`- **Top themes:** ${stats.topWords.slice(0, 5).map(([word]) => `\`${word}\``).join(', ')}`);
   }
@@ -552,10 +568,14 @@ export function generateMarkdownSummary({
   for (const participant of stats.participants) {
     const count = stats.messageCountByParticipant[participant];
     const words = stats.wordCountByParticipant[participant];
+    const wordsPerMessage = stats.averageWordsPerMessage?.[participant];
     const avgLength = stats.averageMessageLength[participant];
     const response = stats.responseTimes[participant];
     const bits = [`${participant}: **${count.toLocaleString()}** messages`];
     if (words) bits.push(`${words.toLocaleString()} words`);
+    if (wordsPerMessage) {
+      bits.push(`${wordsPerMessage.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} words/msg`);
+    }
     if (avgLength) bits.push(`avg length ${avgLength} chars`);
     if (response) bits.push(`average response ≈ ${response} min`);
     lines.push(`- ${bits.join(' · ')}`);

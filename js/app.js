@@ -11,6 +11,7 @@ let stats = null;
 let fullStats = null;
 let participantsChart = null;
 let hourlyChart = null;
+let wordsChart = null;
 let activeDateFormat = 'DMY';
 let rawChatText = '';
 
@@ -159,6 +160,10 @@ function updateLoadSuccessMessage() {
 }
 
 function updateSummaryCards(currentStats) {
+  const averageWords = currentStats.overallAverageWordsPerMessage;
+  const averageWordsLabel = typeof averageWords === 'number' && averageWords > 0
+    ? averageWords.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    : '0';
   const cards = [
     {
       title: 'Messages',
@@ -174,6 +179,11 @@ function updateSummaryCards(currentStats) {
       title: 'Total words',
       value: currentStats.totalWords.toLocaleString(),
       hint: 'Excludes attachments and system notifications.'
+    },
+    {
+      title: 'Avg words/message',
+      value: averageWordsLabel,
+      hint: 'Across all participant messages.'
     },
     {
       title: 'Media shared',
@@ -203,7 +213,7 @@ function updateSummaryCards(currentStats) {
     .join('');
 }
 
-function renderChart({ elementId, labels, data, label, color, chartRef }) {
+function renderChart({ elementId, labels, data, label, color, chartRef, datasets, type = 'bar', options = {} }) {
   const ctx = document.getElementById(elementId);
   if (!ctx) return null;
 
@@ -211,18 +221,22 @@ function renderChart({ elementId, labels, data, label, color, chartRef }) {
     chartRef.destroy();
   }
 
-  return new Chart(ctx, {
-    type: 'bar',
+  const resolvedDatasets = Array.isArray(datasets) && datasets.length
+    ? datasets
+    : [
+      {
+        label,
+        data,
+        backgroundColor: color,
+        borderRadius: 8
+      }
+    ];
+
+  const baseOptions = {
+    type,
     data: {
       labels,
-      datasets: [
-        {
-          label,
-          data,
-          backgroundColor: color,
-          borderRadius: 8
-        }
-      ]
+      datasets: resolvedDatasets
     },
     options: {
       responsive: true,
@@ -250,10 +264,56 @@ function renderChart({ elementId, labels, data, label, color, chartRef }) {
       },
       plugins: {
         legend: {
-          display: false
+          display: false,
+          labels: {
+            color: '#cbd5f5'
+          }
         }
       }
     }
+  };
+
+  const mergedOptions = { ...baseOptions.options };
+  const userOptions = options || {};
+
+  if (userOptions.scales) {
+    mergedOptions.scales = { ...mergedOptions.scales };
+    for (const [key, value] of Object.entries(userOptions.scales)) {
+      mergedOptions.scales[key] = {
+        ...(mergedOptions.scales[key] || {}),
+        ...value
+      };
+    }
+  }
+
+  if (userOptions.plugins) {
+    mergedOptions.plugins = { ...mergedOptions.plugins };
+    for (const [key, value] of Object.entries(userOptions.plugins)) {
+      mergedOptions.plugins[key] = {
+        ...(mergedOptions.plugins[key] || {}),
+        ...value
+      };
+      if (key === 'legend' && value.labels) {
+        mergedOptions.plugins.legend.labels = {
+          ...(mergedOptions.plugins.legend.labels || {}),
+          ...value.labels
+        };
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(userOptions)) {
+    if (key === 'scales' || key === 'plugins') continue;
+    mergedOptions[key] = value;
+  }
+
+  return new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: resolvedDatasets
+    },
+    options: mergedOptions
   });
 }
 
@@ -264,9 +324,14 @@ function updateCharts(currentStats) {
   participantsChart = renderChart({
     elementId: 'participants-chart',
     labels: participantLabels,
-    data: participantData,
-    label: 'Messages',
-    color: 'rgba(56, 189, 248, 0.65)',
+    datasets: [
+      {
+        label: 'Messages',
+        data: participantData,
+        backgroundColor: 'rgba(56, 189, 248, 0.65)',
+        borderRadius: 8
+      }
+    ],
     chartRef: participantsChart
   });
 
@@ -276,10 +341,83 @@ function updateCharts(currentStats) {
   hourlyChart = renderChart({
     elementId: 'hourly-chart',
     labels: hourlyLabels,
-    data: hourlyData,
-    label: 'Messages per hour',
-    color: 'rgba(129, 140, 248, 0.65)',
+    datasets: [
+      {
+        label: 'Messages per hour',
+        data: hourlyData,
+        backgroundColor: 'rgba(129, 140, 248, 0.65)',
+        borderRadius: 8
+      }
+    ],
     chartRef: hourlyChart
+  });
+
+  const totalWordData = participantLabels.map((participant) => currentStats.wordCountByParticipant[participant] || 0);
+  const averageWordData = participantLabels.map((participant) => currentStats.averageWordsPerMessage?.[participant] || 0);
+
+  wordsChart = renderChart({
+    elementId: 'words-chart',
+    labels: participantLabels,
+    datasets: [
+      {
+        type: 'bar',
+        label: 'Total words',
+        data: totalWordData,
+        backgroundColor: 'rgba(34, 197, 94, 0.65)',
+        borderRadius: 8,
+        yAxisID: 'y',
+        order: 2
+      },
+      {
+        type: 'line',
+        label: 'Avg words/msg',
+        data: averageWordData,
+        borderColor: 'rgba(244, 114, 182, 0.9)',
+        backgroundColor: 'rgba(244, 114, 182, 0.35)',
+        tension: 0.35,
+        pointRadius: 4,
+        pointBackgroundColor: 'rgba(244, 114, 182, 1)',
+        pointBorderColor: 'rgba(244, 114, 182, 1)',
+        borderWidth: 2,
+        yAxisID: 'y1',
+        order: 1
+      }
+    ],
+    chartRef: wordsChart,
+    options: {
+      scales: {
+        y: {
+          title: {
+            display: true,
+            text: 'Total words',
+            color: '#cbd5f5'
+          }
+        },
+        y1: {
+          position: 'right',
+          grid: {
+            drawOnChartArea: false,
+            color: 'rgba(148, 163, 184, 0.1)'
+          },
+          ticks: {
+            color: '#fbcfe8'
+          },
+          title: {
+            display: true,
+            text: 'Average words per message',
+            color: '#fbcfe8'
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: '#cbd5f5'
+          }
+        }
+      }
+    }
   });
 }
 
