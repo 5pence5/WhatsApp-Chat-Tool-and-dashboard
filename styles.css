@@ -218,6 +218,13 @@ button.subtle {
   border-radius: 16px;
   padding: 1rem;
   background: rgba(15, 23, 42, 0.55);
+  height: clamp(280px, 35vw, 360px);
+  position: relative;
+}
+
+.chart-block canvas {
+  width: 100%;
+  height: 100%;
 }
 
 .chart-block h3 {
