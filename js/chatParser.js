@@ -302,6 +302,7 @@ export function computeStatistics(messages, options = {}) {
       longestStreak: 0,
       longestStreakRange: null,
       responseTimes: {},
+      longestMessageByParticipant: {},
       responseGapMinutes: baseResponseGap,
       responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
     };
@@ -311,6 +312,7 @@ export function computeStatistics(messages, options = {}) {
   const messageCountByParticipant = {};
   const wordCountByParticipant = {};
   const totalWordsByParticipant = {};
+  const longestMessageByParticipant = {};
   const messagesByDate = new Map();
   const messagesByHour = new Array(24).fill(0);
   const words = [];
@@ -348,20 +350,50 @@ export function computeStatistics(messages, options = {}) {
     if (!(author in totalWordsByParticipant)) {
       totalWordsByParticipant[author] = 0;
     }
+    if (!(author in longestMessageByParticipant)) {
+      longestMessageByParticipant[author] = null;
+    }
 
     totalMessages += 1;
 
-    if (isMediaMessage(message.content)) {
+    const content = message.content || '';
+    const trimmedContent = content.trim();
+    const charCount = trimmedContent.length;
+    let wordList = [];
+    let descriptiveWordCount = 0;
+
+    const mediaMessage = isMediaMessage(content);
+
+    if (mediaMessage) {
       mediaCount += 1;
     } else {
-      const wordList = extractWords(message.content);
+      wordList = extractWords(content);
       wordCountByParticipant[author] += wordList.length;
-      totalWordsByParticipant[author] += message.content.length;
+      totalWordsByParticipant[author] += content.length;
       totalWords += wordList.length;
       words.push(...wordList);
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
         emojiCounts.set(emoji, (emojiCounts.get(emoji) || 0) + 1);
+      }
+      descriptiveWordCount = trimmedContent ? trimmedContent.split(/\s+/).filter(Boolean).length : 0;
+    }
+
+    if (!mediaMessage && (descriptiveWordCount > 0 || charCount > 0)) {
+      const currentLongest = longestMessageByParticipant[author];
+      const shouldReplace = !currentLongest
+        || descriptiveWordCount > currentLongest.wordCount
+        || (descriptiveWordCount === currentLongest.wordCount && charCount > currentLongest.charCount)
+        || (descriptiveWordCount === currentLongest.wordCount && charCount === currentLongest.charCount
+          && message.timestamp < currentLongest.timestamp);
+
+      if (shouldReplace) {
+        longestMessageByParticipant[author] = {
+          timestamp: message.timestamp,
+          content: message.content,
+          wordCount: descriptiveWordCount,
+          charCount
+        };
       }
     }
 
@@ -460,6 +492,7 @@ export function computeStatistics(messages, options = {}) {
     longestStreak: streaks.length,
     longestStreakRange: streaks.range,
     responseTimes,
+    longestMessageByParticipant,
     responseGapMinutes: baseResponseGap,
     responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
   };
@@ -571,6 +604,7 @@ export function generateMarkdownSummary({
     const wordsPerMessage = stats.averageWordsPerMessage?.[participant];
     const avgLength = stats.averageMessageLength[participant];
     const response = stats.responseTimes[participant];
+    const longest = stats.longestMessageByParticipant?.[participant];
     const bits = [`${participant}: **${count.toLocaleString()}** messages`];
     if (words) bits.push(`${words.toLocaleString()} words`);
     if (wordsPerMessage) {
@@ -578,6 +612,12 @@ export function generateMarkdownSummary({
     }
     if (avgLength) bits.push(`avg length ${avgLength} chars`);
     if (response) bits.push(`average response ≈ ${response} min`);
+    if (longest) {
+      const descriptor = longest.wordCount
+        ? `${longest.wordCount} ${longest.wordCount === 1 ? 'word' : 'words'}`
+        : `${longest.charCount} chars`;
+      bits.push(`longest message ${descriptor} (${formatLocalDateTime(longest.timestamp)})`);
+    }
     lines.push(`- ${bits.join(' · ')}`);
   }
 

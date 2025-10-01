@@ -26,6 +26,11 @@ async function main() {
     throw new Error('Parser failed to load messages from the example chat.');
   }
 
+  const isMediaPlaceholder = (content = '') => {
+    const lower = content.toLowerCase();
+    return lower.includes('omitted') || lower.includes('<media') || lower.includes('image omitted') || lower.includes('video omitted');
+  };
+
   if (!messages.some((message) => message.content.includes('ec8s61tkc7gzvk4cim6a'))) {
     throw new Error('Expected to find the generated WiFi password sample in the chat.');
   }
@@ -33,6 +38,61 @@ async function main() {
   const stats = computeStatistics(messages);
   if (stats.participants.length < 2) {
     throw new Error('Expected at least two participants in the example chat.');
+  }
+
+  if (!stats.longestMessageByParticipant) {
+    throw new Error('Expected longest message metadata to be returned in statistics.');
+  }
+
+  for (const participant of stats.participants) {
+    const record = stats.longestMessageByParticipant[participant];
+    const best = messages
+      .filter((message) => message.author === participant && message.type === 'message' && !isMediaPlaceholder(message.content))
+      .reduce((currentBest, message) => {
+        const candidateTrimmed = (message.content || '').trim();
+        if (!candidateTrimmed) {
+          return currentBest;
+        }
+        const candidateWords = candidateTrimmed.split(/\s+/).filter(Boolean).length;
+        const candidateChars = candidateTrimmed.length;
+        if (!currentBest) {
+          return { message, candidateWords, candidateChars };
+        }
+        if (candidateWords > currentBest.candidateWords) {
+          return { message, candidateWords, candidateChars };
+        }
+        if (candidateWords === currentBest.candidateWords && candidateChars > currentBest.candidateChars) {
+          return { message, candidateWords, candidateChars };
+        }
+        return currentBest;
+      }, null);
+
+    if (!best) {
+      if (record !== null && typeof record !== 'undefined') {
+        throw new Error(`Participants without qualifying messages should not report longest message metadata for ${participant}.`);
+      }
+      continue;
+    }
+
+    if (!record) {
+      throw new Error(`Missing longest message entry for ${participant}.`);
+    }
+    if (!(record.timestamp instanceof Date) || Number.isNaN(record.timestamp.getTime())) {
+      throw new Error(`Longest message timestamp for ${participant} should be a valid Date.`);
+    }
+
+    const trimmed = (record.content || '').trim();
+    const expectedWordCount = trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0;
+    if (record.wordCount !== expectedWordCount) {
+      throw new Error(`Word count for ${participant}'s longest message should match the trimmed content.`);
+    }
+    if (record.charCount !== trimmed.length) {
+      throw new Error(`Character count for ${participant}'s longest message should match the trimmed content.`);
+    }
+
+    if (best.message.content !== record.content || best.message.timestamp.getTime() !== record.timestamp.getTime()) {
+      throw new Error(`Longest message metadata for ${participant} should reference the most substantial message.`);
+    }
   }
 
   const mediaPlaceholderMessage = {
