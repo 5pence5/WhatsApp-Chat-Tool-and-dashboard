@@ -89,7 +89,13 @@
       </div>
       <div class="insights-grid">
         <div>
-          <h3>Top words</h3>
+          <div class="insight-header">
+            <h3>Top words</h3>
+            <label class="insight-toggle">
+              <input type="checkbox" id="top-words-ignore-common" disabled />
+              <span>Hide common English words</span>
+            </label>
+          </div>
           <ol id="top-words" class="pill-list"></ol>
         </div>
         <div class="participant-word-breakdown">

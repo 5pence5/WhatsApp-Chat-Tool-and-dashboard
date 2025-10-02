@@ -315,7 +315,8 @@ export function computeStatistics(messages, options = {}) {
       responseTimes: {},
       longestMessageByParticipant: {},
       responseGapMinutes: baseResponseGap,
-      responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
+      responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0,
+      wordFrequency: {}
     };
   }
 
@@ -327,7 +328,7 @@ export function computeStatistics(messages, options = {}) {
   const longestMessageByParticipant = {};
   const messagesByDate = new Map();
   const messagesByHour = new Array(24).fill(0);
-  const words = [];
+  const wordFrequency = {};
   const emojiCounts = new Map();
   const responseTracking = {};
   const responseTimes = {};
@@ -386,10 +387,10 @@ export function computeStatistics(messages, options = {}) {
       wordCountByParticipant[author] += wordList.length;
       totalWordsByParticipant[author] += content.length;
       totalWords += wordList.length;
-      words.push(...wordList);
       const frequency = wordFrequencyByParticipant[author];
       for (const word of wordList) {
         frequency[word] = (frequency[word] || 0) + 1;
+        wordFrequency[word] = (wordFrequency[word] || 0) + 1;
       }
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
@@ -449,10 +450,14 @@ export function computeStatistics(messages, options = {}) {
     }
   }
 
-  const topWords = Object.entries(words.reduce((acc, word) => {
-    acc[word] = (acc[word] || 0) + 1;
-    return acc;
-  }, {})).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const topWords = Object.entries(wordFrequency)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) {
+        return b[1] - a[1];
+      }
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, 15);
 
   const topEmojis = Array.from(emojiCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
@@ -531,7 +536,8 @@ export function computeStatistics(messages, options = {}) {
     responseTimes,
     longestMessageByParticipant,
     responseGapMinutes: baseResponseGap,
-    responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0
+    responseGapOvernightBufferMinutes: baseResponseGap ? overnightBuffer : 0,
+    wordFrequency
   };
 }
 
