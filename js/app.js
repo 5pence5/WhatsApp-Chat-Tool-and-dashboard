@@ -2,7 +2,8 @@ import {
   parseChat,
   computeStatistics,
   filterMessagesByDate,
-  generateMarkdownSummary
+  generateMarkdownSummary,
+  generateMarkdownTranscript
 } from './chatParser.js';
 
 let allMessages = [];
@@ -41,6 +42,9 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+const transcriptTitleInput = document.getElementById('transcript-title');
+const downloadTranscriptButton = document.getElementById('download-transcript');
+const transcriptPreview = document.getElementById('transcript-preview');
 
 let selectedParticipantForWords = null;
 
@@ -841,6 +845,8 @@ function enableControls(enabled) {
     applyRangeButton,
     resetRangeButton,
     generateMdButton,
+    transcriptTitleInput,
+    downloadTranscriptButton,
     responseGapInput,
     responseOvernightToggle,
     responseOvernightMinutesInput
@@ -977,6 +983,38 @@ function prepareMarkdown() {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+function prepareTranscript() {
+  if (!filteredMessages.length) {
+    if (transcriptPreview) {
+      transcriptPreview.value = '';
+    }
+    loadStatus.textContent = 'No messages available for the selected period.';
+    return false;
+  }
+
+  const markdown = generateMarkdownTranscript({
+    title: transcriptTitleInput?.value.trim() || 'WhatsApp Chat Transcript',
+    messages: filteredMessages,
+    startDate: startDateInput?.value || undefined,
+    endDate: endDateInput?.value || undefined
+  });
+
+  if (transcriptPreview) {
+    transcriptPreview.value = markdown;
+  }
+
+  const blob = new Blob([markdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${(transcriptTitleInput?.value || 'whatsapp-chat-transcript').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return true;
+}
+
 fileInput.addEventListener('change', async (event) => {
   const [file] = event.target.files;
   if (!file) return;
@@ -1067,6 +1105,12 @@ generateMdButton.addEventListener('click', () => {
   loadStatus.textContent = 'Markdown summary generated!';
 });
 
+downloadTranscriptButton?.addEventListener('click', () => {
+  if (prepareTranscript()) {
+    loadStatus.textContent = 'Markdown transcript generated!';
+  }
+});
+
 responseGapInput?.addEventListener('input', handleResponseSettingsChange);
 responseOvernightToggle?.addEventListener('change', handleResponseSettingsChange);
 responseOvernightMinutesInput?.addEventListener('input', handleResponseSettingsChange);
@@ -1086,6 +1130,9 @@ document.addEventListener('drop', async (event) => {
 window.addEventListener('DOMContentLoaded', () => {
   enableControls(false);
   mdPreview.value = '';
+  if (transcriptPreview) {
+    transcriptPreview.value = '';
+  }
   if (participantTopWordsList) {
     participantTopWordsList.innerHTML = '<li>No participants yet</li>';
   }

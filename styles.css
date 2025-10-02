@@ -574,9 +574,26 @@ button.subtle {
   margin-top: 1.5rem;
 }
 
+.export-helper {
+  margin-top: 1.5rem;
+  color: var(--muted);
+}
+
+.export-transcript-controls button {
+  align-self: end;
+}
+
 #md-preview {
   margin-top: 1rem;
   min-height: 220px;
+  resize: vertical;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1.5;
+}
+
+#transcript-preview {
+  margin-top: 1rem;
+  min-height: 280px;
   resize: vertical;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   line-height: 1.5;
