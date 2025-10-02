@@ -659,7 +659,7 @@ function refreshStats() {
   renderStats(stats);
 }
 
-function updateResponseTimesList(currentStats) {
+export function updateResponseTimesList(currentStats) {
   if (!responseTimesList) return;
 
   if (!currentStats.participants.length) {
@@ -712,10 +712,11 @@ function updateResponseTimesList(currentStats) {
 
   responseTimesList.innerHTML = entries
     .map(({ participant, average, median, samples }) => {
+      const safeParticipant = escapeHtml(participant);
       if (average === null && median === null) {
         return `
         <li>
-          <span class="response-name">${participant}</span>
+          <span class="response-name">${safeParticipant}</span>
           <span class="response-time-value">—</span>
         </li>
       `;
@@ -746,7 +747,7 @@ function updateResponseTimesList(currentStats) {
 
       return `
         <li>
-          <span class="response-name">${participant}</span>
+          <span class="response-name">${safeParticipant}</span>
           <span class="response-time-value">${metricsHtml}${sampleLabel}</span>
         </li>
       `;
@@ -790,7 +791,7 @@ function updateResponseCutoffNote(currentStats) {
     : `${parts.join(' ')}. No qualifying reply gaps yet with this cutoff.`;
 }
 
-function buildInsights(currentStats) {
+export function buildInsights(currentStats) {
   updateResponseTimesList(currentStats);
   updateResponseCutoffNote(currentStats);
   const insights = [];
@@ -815,6 +816,7 @@ function buildInsights(currentStats) {
       return a[1].medianMinutes - b[1].medianMinutes;
     });
     const [fastestName, fastestMetrics] = responseEntries[0];
+    const safeFastestName = escapeHtml(fastestName);
     const formatMinutes = (value) => value.toLocaleString(undefined, {
       minimumFractionDigits: 1,
       maximumFractionDigits: 1
@@ -825,7 +827,7 @@ function buildInsights(currentStats) {
     const medianLabel = typeof fastestMetrics.medianMinutes === 'number'
       ? `${formatMinutes(fastestMetrics.medianMinutes)} min`
       : '—';
-    insights.push(`Quickest responder: <strong>${fastestName}</strong> with replies averaging ${averageLabel} (median ${medianLabel}).`);
+    insights.push(`Quickest responder: <strong>${safeFastestName}</strong> with replies averaging ${averageLabel} (median ${medianLabel}).`);
   }
   if (!insights.length) {
     insights.push('Insights will appear here once you load a chat.');

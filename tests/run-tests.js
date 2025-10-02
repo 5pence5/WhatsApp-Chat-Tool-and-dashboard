@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { parseChat, computeStatistics, generateMarkdownSummary, filterMessagesByDate } from '../js/chatParser.js';
+import { JSDOM } from 'jsdom';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -431,6 +432,100 @@ async function main() {
   const alphaAverage = filteredStats.averageWordsPerMessage.Alpha;
   if (alphaAverage !== roundToTenth(3 / 1)) {
     throw new Error('Filtered averages should recalculate when narrowing the date range.');
+  }
+
+  const dom = new JSDOM(`<!DOCTYPE html>
+    <html>
+      <body>
+        <input id="chat-file" />
+        <div id="file-helper"></div>
+        <div id="load-status"></div>
+        <input id="start-date" />
+        <input id="end-date" />
+        <button id="apply-range"></button>
+        <button id="reset-range"></button>
+        <div id="summary-cards"></div>
+        <ul id="top-words"></ul>
+        <select id="participant-word-select"></select>
+        <div id="participant-word-selector"></div>
+        <div id="participant-word-summary"></div>
+        <ul id="participant-top-words"></ul>
+        <ul id="top-emojis"></ul>
+        <ul id="insight-list"></ul>
+        <ul id="response-times"></ul>
+        <ul id="longest-messages"></ul>
+        <input id="response-gap-limit" />
+        <input id="response-overnight-toggle" type="checkbox" />
+        <input id="response-overnight-minutes" />
+        <div id="response-cutoff-note"></div>
+        <input id="md-title" />
+        <input id="sample-count" />
+        <button id="generate-md"></button>
+        <textarea id="md-preview"></textarea>
+        <canvas id="participants-chart"></canvas>
+        <canvas id="hourly-chart"></canvas>
+        <canvas id="words-chart"></canvas>
+      </body>
+    </html>`, { url: 'http://localhost' });
+
+  const { window } = dom;
+  globalThis.window = window;
+  globalThis.document = window.document;
+  globalThis.HTMLElement = window.HTMLElement;
+  globalThis.HTMLInputElement = window.HTMLInputElement;
+  globalThis.Event = window.Event;
+  globalThis.CustomEvent = window.CustomEvent;
+  globalThis.Node = window.Node;
+  globalThis.Blob = window.Blob;
+  globalThis.getComputedStyle = window.getComputedStyle.bind(window);
+  globalThis.URL = window.URL;
+
+  class StubChart {
+    constructor() {}
+    destroy() {}
+  }
+
+  globalThis.Chart = StubChart;
+  window.Chart = StubChart;
+
+  const { updateResponseTimesList, buildInsights } = await import('../js/app.js');
+
+  const maliciousName = 'Eve <script>alert(1)</script>';
+  const uiStats = {
+    participants: [maliciousName],
+    responseTimes: {
+      [maliciousName]: {
+        averageMinutes: 4.5,
+        medianMinutes: 3.2,
+        samples: 5
+      }
+    },
+    totalMessages: 1,
+    responseGapMinutes: null,
+    responseGapOvernightBufferMinutes: 0,
+    busiestDay: null,
+    busiestHour: null,
+    longestStreak: 0,
+    longestStreakRange: null
+  };
+
+  updateResponseTimesList(uiStats);
+  buildInsights(uiStats);
+
+  const responseHtml = document.getElementById('response-times').innerHTML;
+  if (responseHtml.includes('<script>alert')) {
+    throw new Error('Response times list should escape participant-provided HTML.');
+  }
+  if (!responseHtml.includes('&lt;script&gt;alert(1)&lt;/script&gt;')) {
+    throw new Error('Response times list should render escaped participant names.');
+  }
+
+  const insightHtml = document.getElementById('insight-list').innerHTML;
+  if (insightHtml.includes('<script>alert')) {
+    throw new Error('Insights should escape participant-provided HTML.');
+  }
+  if (!insightHtml.includes('&lt;script&gt;alert(1)&lt;/script&gt;')) {
+    throw new Error('Insights should render escaped participant names.');
   }
 
   console.log('Parsed messages:', messages.length);
