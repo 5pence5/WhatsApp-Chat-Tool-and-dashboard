@@ -4,6 +4,7 @@ import {
   filterMessagesByDate,
   generateMarkdownSummary
 } from './chatParser.js';
+import { COMMON_ENGLISH_WORDS } from './commonWords.js';
 
 let allMessages = [];
 let filteredMessages = [];
@@ -25,6 +26,7 @@ const applyRangeButton = document.getElementById('apply-range');
 const resetRangeButton = document.getElementById('reset-range');
 const summaryCardsContainer = document.getElementById('summary-cards');
 const topWordsList = document.getElementById('top-words');
+const topWordsIgnoreCommonToggle = document.getElementById('top-words-ignore-common');
 const participantWordSelect = document.getElementById('participant-word-select');
 const participantWordSelector = document.getElementById('participant-word-selector');
 const participantWordSummary = document.getElementById('participant-word-summary');
@@ -43,6 +45,7 @@ const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
 
 let selectedParticipantForWords = null;
+let ignoreCommonTopWords = false;
 
 dateFormatChooser.id = 'date-format-chooser';
 dateFormatChooser.className = 'date-format-chooser';
@@ -482,6 +485,48 @@ function updateTopList(container, items, formatter, emptyMessage = 'No data yet'
     .join('');
 }
 
+function getTopWordEntries(currentStats, { ignoreCommon = false } = {}) {
+  if (!currentStats) {
+    return [];
+  }
+
+  const hasFrequency = currentStats.wordFrequency && typeof currentStats.wordFrequency === 'object';
+
+  if (hasFrequency) {
+    let entries = Object.entries(currentStats.wordFrequency);
+    if (ignoreCommon) {
+      entries = entries.filter(([word]) => !COMMON_ENGLISH_WORDS.has(word));
+    }
+    return entries
+      .sort((a, b) => {
+        if (b[1] !== a[1]) {
+          return b[1] - a[1];
+        }
+        return a[0].localeCompare(b[0]);
+      })
+      .slice(0, 15);
+  }
+
+  let entries = Array.isArray(currentStats.topWords)
+    ? currentStats.topWords.map(([word, count]) => [word, count])
+    : [];
+  if (ignoreCommon) {
+    entries = entries.filter(([word]) => !COMMON_ENGLISH_WORDS.has(word));
+  }
+  return entries.slice(0, 15);
+}
+
+function renderTopWords(currentStats) {
+  if (!topWordsList) return;
+  const entries = getTopWordEntries(currentStats, { ignoreCommon: ignoreCommonTopWords });
+  updateTopList(
+    topWordsList,
+    entries,
+    ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`,
+    'No words yet'
+  );
+}
+
 function renderLongestMessages(currentStats) {
   if (!longestMessagesList) return;
 
@@ -646,7 +691,7 @@ function selectParticipantForWords(participant, { focus = false } = {}) {
 function renderStats(currentStats) {
   updateSummaryCards(currentStats);
   updateCharts(currentStats);
-  updateTopList(topWordsList, currentStats.topWords, ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`);
+  renderTopWords(currentStats);
   updateTopList(topEmojisList, currentStats.topEmojis, ([emoji, count]) => `<span>${escapeHtml(emoji)}</span><span>${count}</span>`);
   renderLongestMessages(currentStats);
   renderParticipantWordBreakdown(currentStats);
@@ -843,9 +888,12 @@ function enableControls(enabled) {
     generateMdButton,
     responseGapInput,
     responseOvernightToggle,
-    responseOvernightMinutesInput
+    responseOvernightMinutesInput,
+    topWordsIgnoreCommonToggle
   ].forEach((el) => {
-    el.disabled = !enabled;
+    if (el) {
+      el.disabled = !enabled;
+    }
   });
   if (!enabled && responseCutoffNote) {
     responseCutoffNote.textContent = 'Reply time stats (avg & median) will appear once a chat is loaded.';
@@ -1062,6 +1110,11 @@ participantWordSelector?.addEventListener('keydown', (event) => {
   }
 });
 
+topWordsIgnoreCommonToggle?.addEventListener('change', (event) => {
+  ignoreCommonTopWords = Boolean(event.target.checked);
+  renderTopWords(stats);
+});
+
 generateMdButton.addEventListener('click', () => {
   prepareMarkdown();
   loadStatus.textContent = 'Markdown summary generated!';
@@ -1086,6 +1139,11 @@ document.addEventListener('drop', async (event) => {
 window.addEventListener('DOMContentLoaded', () => {
   enableControls(false);
   mdPreview.value = '';
+  ignoreCommonTopWords = false;
+  if (topWordsIgnoreCommonToggle) {
+    topWordsIgnoreCommonToggle.checked = false;
+  }
+  renderTopWords(null);
   if (participantTopWordsList) {
     participantTopWordsList.innerHTML = '<li>No participants yet</li>';
   }
