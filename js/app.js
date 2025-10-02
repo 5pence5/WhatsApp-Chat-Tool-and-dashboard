@@ -4,6 +4,10 @@ import {
   filterMessagesByDate,
   generateMarkdownSummary
 } from './chatParser.js';
+import {
+  chooseChatFileCandidate,
+  formatCandidateLabel
+} from './chatFileSelector.js';
 import { COMMON_ENGLISH_WORDS } from './commonWords.js';
 
 let allMessages = [];
@@ -20,6 +24,7 @@ const fileInput = document.getElementById('chat-file');
 const fileHelper = document.getElementById('file-helper');
 const loadStatus = document.getElementById('load-status');
 const dateFormatChooser = document.createElement('div');
+const archiveFileChooser = document.createElement('div');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
 const applyRangeButton = document.getElementById('apply-range');
@@ -50,25 +55,174 @@ let ignoreCommonTopWords = false;
 dateFormatChooser.id = 'date-format-chooser';
 dateFormatChooser.className = 'date-format-chooser';
 dateFormatChooser.hidden = true;
-loadStatus.insertAdjacentElement('afterend', dateFormatChooser);
+
+archiveFileChooser.id = 'archive-file-chooser';
+archiveFileChooser.className = 'archive-file-chooser';
+archiveFileChooser.hidden = true;
+
+loadStatus.insertAdjacentElement('afterend', archiveFileChooser);
+archiveFileChooser.insertAdjacentElement('afterend', dateFormatChooser);
+
+let activeArchiveChooser = null;
+
+function hideArchiveFileChooser(reason) {
+  if (activeArchiveChooser) {
+    const { handlers, onCancel } = activeArchiveChooser;
+    handlers.forEach(({ element, handler }) => element.removeEventListener('click', handler));
+    activeArchiveChooser = null;
+    if (reason && reason !== 'selected' && typeof onCancel === 'function') {
+      onCancel(reason);
+    }
+  }
+  archiveFileChooser.hidden = true;
+  archiveFileChooser.innerHTML = '';
+}
+
+function renderArchiveFileChooser(options, { onSelect, onCancel } = {}) {
+  hideArchiveFileChooser();
+
+  if (!Array.isArray(options) || !options.length) {
+    return;
+  }
+
+  archiveFileChooser.hidden = false;
+  archiveFileChooser.innerHTML = '';
+
+  const intro = document.createElement('p');
+  intro.textContent = 'Multiple chat transcripts found in the archive. Choose one to continue:';
+  archiveFileChooser.appendChild(intro);
+
+  const list = document.createElement('ul');
+  list.className = 'archive-chat-options';
+  archiveFileChooser.appendChild(list);
+
+  const handlers = [];
+
+  options.forEach((option) => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'archive-chat-option';
+    button.textContent = formatCandidateLabel(option);
+    const handler = () => {
+      hideArchiveFileChooser('selected');
+      if (typeof onSelect === 'function') {
+        onSelect(option);
+      }
+    };
+    button.addEventListener('click', handler);
+    handlers.push({ element: button, handler });
+    item.appendChild(button);
+    list.appendChild(item);
+  });
+
+  const cancelButton = document.createElement('button');
+  cancelButton.type = 'button';
+  cancelButton.className = 'archive-chat-cancel';
+  cancelButton.textContent = 'Cancel selection';
+  const cancelHandler = () => {
+    hideArchiveFileChooser('cancelled');
+  };
+  cancelButton.addEventListener('click', cancelHandler);
+  handlers.push({ element: cancelButton, handler: cancelHandler });
+  archiveFileChooser.appendChild(cancelButton);
+
+  activeArchiveChooser = { handlers, onCancel };
+}
+
+function createSelectionCancelledError(reason = 'cancelled') {
+  const error = new Error(reason === 'replaced'
+    ? 'Chat selection was replaced by a new upload.'
+    : 'Chat selection cancelled.');
+  error.name = 'ChatSelectionCancelledError';
+  error.isChatSelectionCancelled = true;
+  error.reason = reason;
+  return error;
+}
 
 async function loadChatFile(file) {
   if (!file) return null;
 
+  hideArchiveFileChooser('replaced');
+
   if (file.name.toLowerCase().endsWith('.zip')) {
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
-    const txtFileName = Object.keys(zip.files).find((name) => {
+    const decoder = typeof TextDecoder === 'function' ? new TextDecoder('utf-8') : null;
+
+    const candidates = [];
+    await Promise.all(Object.values(zip.files).map(async (entry) => {
+      if (entry.dir) return;
+      const name = entry.name;
       const baseName = name.split('/').pop() || name;
-      if (baseName.startsWith('._')) {
-        return false;
-      }
-      return baseName.toLowerCase().endsWith('.txt');
-    });
-    if (!txtFileName) {
-      throw new Error('No .txt file found inside the zip archive.');
+      if (baseName.startsWith('._')) return;
+      if (!baseName.toLowerCase().endsWith('.txt')) return;
+      const data = await entry.async('uint8array');
+      candidates.push({
+        name,
+        path: name,
+        baseName,
+        size: data.length,
+        data
+      });
+    }));
+
+    const selection = chooseChatFileCandidate(candidates);
+
+    if (selection.type === 'none') {
+      throw new Error('No chat transcripts were found in the uploaded archive.');
     }
-    return zip.files[txtFileName].async('string');
+
+    const decodeData = (data) => {
+      if (!data) {
+        return '';
+      }
+      if (decoder) {
+        return decoder.decode(data);
+      }
+      let result = '';
+      for (let index = 0; index < data.length; index += 1) {
+        result += String.fromCharCode(data[index]);
+      }
+      try {
+        return decodeURIComponent(escape(result));
+      } catch (error) {
+        return result;
+      }
+    };
+
+    if (selection.type === 'selected') {
+      const chosen = candidates.find((candidate) => candidate.name === selection.candidate.name) || candidates[0];
+      return decodeData(chosen.data);
+    }
+
+    loadStatus.classList.remove('error');
+    loadStatus.textContent = 'Multiple chat transcripts found. Please choose one below.';
+
+    return new Promise((resolve, reject) => {
+      const lookup = new Map(candidates.map((candidate) => [candidate.name, candidate]));
+      const handleSelect = (option) => {
+        const chosen = lookup.get(option.name);
+        if (!chosen) {
+          reject(new Error('The selected chat file could not be found in the archive.'));
+          return;
+        }
+        loadStatus.textContent = 'Parsing chat…';
+        resolve(decodeData(chosen.data));
+      };
+      const handleCancel = (reason) => {
+        if (reason === 'cancelled') {
+          loadStatus.textContent = 'Chat selection cancelled. Please choose a transcript to continue.';
+          loadStatus.classList.add('error');
+        }
+        reject(createSelectionCancelledError(reason));
+      };
+
+      renderArchiveFileChooser(selection.candidates, {
+        onSelect: handleSelect,
+        onCancel: handleCancel
+      });
+    });
   }
 
   return file.text();
@@ -994,12 +1148,14 @@ function showError(message) {
   loadStatus.textContent = message;
   loadStatus.classList.add('error');
   hideDateFormatChooser();
+  hideArchiveFileChooser('error');
 }
 
 function clearStatus() {
   loadStatus.textContent = '';
   loadStatus.classList.remove('error');
   hideDateFormatChooser();
+  hideArchiveFileChooser();
 }
 
 function prepareMarkdown() {
@@ -1031,15 +1187,22 @@ fileInput.addEventListener('change', async (event) => {
   const [file] = event.target.files;
   if (!file) return;
 
+  hideArchiveFileChooser('replaced');
   fileHelper.textContent = file.name;
   clearStatus();
   loadStatus.textContent = 'Parsing chat…';
 
   try {
     rawChatText = await loadChatFile(file);
+    if (!rawChatText) {
+      return;
+    }
     const parseResult = parseChat(rawChatText);
     processParsedChat(parseResult);
   } catch (error) {
+    if (error?.isChatSelectionCancelled) {
+      return;
+    }
     console.error(error);
     showError(error.message || 'Something went wrong while parsing the chat.');
     enableControls(false);
