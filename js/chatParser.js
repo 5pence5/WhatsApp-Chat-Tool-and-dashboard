@@ -322,7 +322,7 @@ export function computeStatistics(messages, options = {}) {
   const participantsSet = new Set();
   const messageCountByParticipant = {};
   const wordCountByParticipant = {};
-  const totalWordsByParticipant = {};
+  const totalCharsByParticipant = {};
   const wordFrequencyByParticipant = {};
   const longestMessageByParticipant = {};
   const messagesByDate = new Map();
@@ -359,8 +359,8 @@ export function computeStatistics(messages, options = {}) {
     if (!(author in wordCountByParticipant)) {
       wordCountByParticipant[author] = 0;
     }
-    if (!(author in totalWordsByParticipant)) {
-      totalWordsByParticipant[author] = 0;
+    if (!(author in totalCharsByParticipant)) {
+      totalCharsByParticipant[author] = 0;
     }
     if (!(author in wordFrequencyByParticipant)) {
       wordFrequencyByParticipant[author] = {};
@@ -384,7 +384,7 @@ export function computeStatistics(messages, options = {}) {
     } else {
       wordList = extractWords(content);
       wordCountByParticipant[author] += wordList.length;
-      totalWordsByParticipant[author] += content.length;
+      totalCharsByParticipant[author] += charCount;
       totalWords += wordList.length;
       words.push(...wordList);
       const frequency = wordFrequencyByParticipant[author];
@@ -460,7 +460,7 @@ export function computeStatistics(messages, options = {}) {
   const averageWordsPerMessage = {};
   for (const participant of participants) {
     const count = messageCountByParticipant[participant] || 0;
-    averageMessageLength[participant] = count ? round(totalWordsByParticipant[participant] / count, 1) : 0;
+    averageMessageLength[participant] = count ? round(totalCharsByParticipant[participant] / count, 1) : 0;
     const words = wordCountByParticipant[participant] || 0;
     averageWordsPerMessage[participant] = count ? round(words / count, 1) : 0;
   }
