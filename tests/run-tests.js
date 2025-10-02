@@ -34,6 +34,7 @@ function extractWords(content = '') {
   return content
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, '')
+    .replace(/[\u2018\u2019]/g, "'")
     .replace(/[^\p{L}\p{N}\s']/gu, ' ')
     .split(/\s+/)
     .map((word) => word.replace(/^'+|'+$/g, '').replace(/'/g, ''))
@@ -170,6 +171,35 @@ async function main() {
         throw new Error(`Only the highest-frequency words should appear for ${participant}.`);
       }
     }
+  }
+
+  const smartApostropheChat = [
+    '01/02/2024, 09:00 - Curly: I’m excited, don’t worry about it'
+  ].join('\n');
+
+  const smartApostropheResult = parseChat(smartApostropheChat);
+  if (smartApostropheResult.messages.length !== 1) {
+    throw new Error('Expected the smart apostrophe sample to yield exactly one message.');
+  }
+
+  const smartApostropheStats = computeStatistics(smartApostropheResult.messages);
+  const curlyWordCount = smartApostropheStats.wordCountByParticipant.Curly;
+  if (curlyWordCount !== 2) {
+    throw new Error(`Smart apostrophes should preserve contractions as single tokens that obey stop-word rules. Expected 2 words, got ${curlyWordCount}.`);
+  }
+
+  const curlyTopWords = smartApostropheStats.topWordsByParticipant.Curly || [];
+  if (curlyTopWords.length !== 2) {
+    throw new Error(`Expected two descriptive words after filtering smart apostrophe contractions, got ${curlyTopWords.length}.`);
+  }
+
+  const curlyWordList = curlyTopWords.map(([word]) => word);
+  if (curlyWordList.includes('don') || curlyWordList.includes('dont')) {
+    throw new Error('Curly apostrophes should not produce stray tokens for stop-word contractions.');
+  }
+
+  if (!curlyWordList.includes('excited') || !curlyWordList.includes('worry')) {
+    throw new Error('Expected descriptive words to remain after filtering smart apostrophe contractions.');
   }
 
   const mediaPlaceholderMessage = {

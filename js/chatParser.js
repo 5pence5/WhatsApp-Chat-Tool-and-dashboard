@@ -249,6 +249,7 @@ function extractWords(content) {
   return content
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, '')
+    .replace(/[\u2018\u2019]/g, "'")
     .replace(/[^\p{L}\p{N}\s']/gu, ' ')
     .split(/\s+/)
     .map((word) => word.replace(/^'+|'+$/g, '').replace(/'/g, ''))
