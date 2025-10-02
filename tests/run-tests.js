@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import { parseChat, computeStatistics, generateMarkdownSummary, filterMessagesByDate } from '../js/chatParser.js';
+import { parseChat, computeStatistics, generateMarkdownSummary, generateMarkdownTranscript, filterMessagesByDate } from '../js/chatParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -252,6 +252,45 @@ async function main() {
 
   if (!markdown.includes('words/msg')) {
     throw new Error('Markdown summary should surface average words per message.');
+  }
+
+  const transcript = generateMarkdownTranscript({
+    title: 'Example Chat Transcript',
+    messages,
+    startDate: '2025-07-31',
+    endDate: '2025-07-31'
+  });
+
+  if (!transcript.includes('# Example Chat Transcript')) {
+    throw new Error('Transcript export should respect the provided title.');
+  }
+
+  if (!transcript.includes('**Timeframe:** 2025-07-31 → 2025-07-31')) {
+    throw new Error('Transcript export should display the requested timeframe.');
+  }
+
+  if (!transcript.includes('**Messages included:** 11')) {
+    throw new Error('Transcript export should report the number of messages included.');
+  }
+
+  if (!transcript.includes('**~Ieommq:**') || !transcript.includes('**Imbl:**')) {
+    throw new Error('Transcript export should retain participant attributions.');
+  }
+
+  const sampleSnippet = (messages[0]?.content || '').split('\n')[0].trim();
+  if (sampleSnippet && !transcript.includes(sampleSnippet)) {
+    throw new Error('Transcript export should include message bodies.');
+  }
+
+  const filtered = filterMessagesByDate(messages, '1900-01-01', '1900-01-02');
+  const filteredTranscript = generateMarkdownTranscript({
+    messages: filtered,
+    startDate: '1900-01-01',
+    endDate: '1900-01-02'
+  });
+
+  if (!filteredTranscript.includes('_No messages matched the selected period._')) {
+    throw new Error('Transcript export should indicate when no messages are present.');
   }
 
   const ambiguousChat = [

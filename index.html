@@ -161,6 +161,15 @@
         <button id="generate-md" disabled>Download Markdown</button>
       </div>
       <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
+      <p class="export-helper">Need the raw conversation? Use the current filters to download a Markdown transcript for that period.</p>
+      <div class="export-controls export-transcript-controls">
+        <label>
+          <span>Transcript title</span>
+          <input type="text" id="transcript-title" placeholder="e.g. Transcript – June Planning Sprint" />
+        </label>
+        <button id="download-transcript" disabled>Download transcript</button>
+      </div>
+      <textarea id="transcript-preview" aria-label="Transcript preview" readonly placeholder="Transcript Markdown will appear here after generation."></textarea>
     </section>
   </main>
 

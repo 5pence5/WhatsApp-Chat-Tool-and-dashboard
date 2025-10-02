@@ -706,3 +706,63 @@ export function generateMarkdownSummary({
 
   return lines.join('\n');
 }
+
+export function generateMarkdownTranscript({
+  title = 'WhatsApp Chat Transcript',
+  messages = [],
+  startDate,
+  endDate
+} = {}) {
+  const sorted = [...messages].sort((a, b) => a.timestamp - b.timestamp);
+  const lines = [];
+  lines.push(`# ${title}`);
+
+  const firstMessage = sorted[0];
+  const lastMessage = sorted.length ? sorted[sorted.length - 1] : null;
+  const timeframe = startDate && endDate
+    ? `**Timeframe:** ${startDate} → ${endDate}`
+    : firstMessage && lastMessage
+      ? `**Timeframe:** ${formatLocalDateTime(firstMessage.timestamp)} → ${formatLocalDateTime(lastMessage.timestamp)}`
+      : null;
+  if (timeframe) {
+    lines.push(timeframe);
+  }
+
+  lines.push(`**Messages included:** ${sorted.length.toLocaleString()}`);
+  const participants = Array.from(new Set(sorted
+    .filter((message) => message.type === 'message')
+    .map((message) => message.author)))
+    .sort((a, b) => a.localeCompare(b));
+  if (participants.length) {
+    lines.push(`**Participants:** ${participants.join(', ')}`);
+  }
+
+  if (!sorted.length) {
+    lines.push('\n_No messages matched the selected period._');
+    return lines.join('\n');
+  }
+
+  lines.push('\n## Messages\n');
+
+  const formatContent = (content) => {
+    const trimmed = (content || '').trim();
+    if (!trimmed) {
+      return '—';
+    }
+    return trimmed.replace(/\r?\n/g, '  \n  ');
+  };
+
+  for (const message of sorted) {
+    const timestamp = formatLocalDateTime(message.timestamp);
+    const formattedContent = formatContent(message.content);
+    if (message.type === 'system') {
+      lines.push(`- ${timestamp} — _${formattedContent}_`);
+    } else {
+      lines.push(`- ${timestamp} — **${message.author}:** ${formattedContent}`);
+    }
+  }
+
+  lines.push('\n---\n_Generated with the WhatsApp Chat Insights Dashboard._');
+
+  return lines.join('\n');
+}
