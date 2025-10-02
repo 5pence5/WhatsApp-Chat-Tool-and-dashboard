@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { parseChat, computeStatistics, generateMarkdownSummary, filterMessagesByDate } from '../js/chatParser.js';
+import { chooseChatFileCandidate } from '../js/chatFileSelector.js';
 import { JSDOM } from 'jsdom';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -274,6 +275,56 @@ async function main() {
 
   if (!markdown.includes('words/msg')) {
     throw new Error('Markdown summary should surface average words per message.');
+  }
+
+  const buildCandidatesFromZip = async (zipInstance) => {
+    const buffer = await zipInstance.generateAsync({ type: 'uint8array' });
+    const archive = await JSZip.loadAsync(buffer);
+    const entries = [];
+    await Promise.all(Object.values(archive.files).map(async (entry) => {
+      if (entry.dir) return;
+      const name = entry.name;
+      const baseName = name.split('/').pop() || name;
+      if (baseName.startsWith('._')) return;
+      if (!baseName.toLowerCase().endsWith('.txt')) return;
+      const data = await entry.async('uint8array');
+      entries.push({
+        name,
+        path: name,
+        baseName,
+        size: data.length
+      });
+    }));
+    return entries;
+  };
+
+  const targetedZip = new JSZip();
+  targetedZip.file('WhatsApp Chat with Project.txt', 'Primary chat transcript\nLine 2\nLine 3');
+  targetedZip.file('Quick note.txt', 'Short note');
+  targetedZip.file('__MACOSX/._WhatsApp Chat with Project.txt', 'junk');
+
+  const targetedCandidates = await buildCandidatesFromZip(targetedZip);
+  const targetedSelection = chooseChatFileCandidate(targetedCandidates);
+  if (targetedSelection.type !== 'selected' || targetedSelection.candidate.baseName !== 'WhatsApp Chat with Project.txt') {
+    throw new Error('Heuristic selection should prefer the primary WhatsApp transcript.');
+  }
+
+  const ambiguousZip = new JSZip();
+  ambiguousZip.file('WhatsApp Chat with Alice.txt', 'Alpha message');
+  ambiguousZip.file('WhatsApp Chat with Bob.txt', 'Alpha message');
+  ambiguousZip.file('Readme.txt', 'General info');
+
+  const ambiguousCandidates = await buildCandidatesFromZip(ambiguousZip);
+  const ambiguousSelection = chooseChatFileCandidate(ambiguousCandidates);
+  if (ambiguousSelection.type !== 'ambiguous') {
+    throw new Error('Equal candidates should require a manual selection.');
+  }
+
+  const ambiguousNames = ambiguousSelection.candidates.map((candidate) => candidate.baseName).sort();
+  if (ambiguousNames.length !== 2
+    || ambiguousNames[0] !== 'WhatsApp Chat with Alice.txt'
+    || ambiguousNames[1] !== 'WhatsApp Chat with Bob.txt') {
+    throw new Error('Ambiguous selection should surface each tied WhatsApp transcript.');
   }
 
   const ambiguousChat = [
