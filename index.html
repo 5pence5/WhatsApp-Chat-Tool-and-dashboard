@@ -102,7 +102,16 @@
           </label>
           <div id="participant-word-selector" class="participant-word-selector" role="radiogroup" aria-labelledby="participant-word-label"></div>
           <p id="participant-word-summary" class="participant-word-summary" aria-live="polite">No participants yet</p>
-          <ol id="participant-top-words" class="pill-list"></ol>
+          <div class="participant-word-columns">
+            <div>
+              <h4 class="participant-word-subtitle">Most used</h4>
+              <ol id="participant-top-words" class="pill-list"></ol>
+            </div>
+            <div>
+              <h4 class="participant-word-subtitle">Most distinctive</h4>
+              <ol id="participant-distinctive-words" class="pill-list"></ol>
+            </div>
+          </div>
         </div>
         <div>
           <h3>Top emojis</h3>
