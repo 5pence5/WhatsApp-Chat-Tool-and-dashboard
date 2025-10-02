@@ -207,6 +207,27 @@ async function main() {
   ensureAveragesMatchCounts(stats);
   ensureAveragesMatchCounts(statsWithMedia);
 
+  const whitespaceMessages = [
+    { timestamp: new Date(2024, 0, 1, 9, 0), author: 'Trimmer', content: 'Hello   ', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 9, 1), author: 'Trimmer', content: '  spaced out   ', type: 'message' },
+    { timestamp: new Date(2024, 0, 1, 9, 2), author: 'Trimmer', content: 'Line with newline\n\n', type: 'message' }
+  ];
+
+  const whitespaceStats = computeStatistics(whitespaceMessages);
+  const trimmedTotal = whitespaceMessages.reduce((sum, message) => sum + (message.content || '').trim().length, 0);
+  const rawTotal = whitespaceMessages.reduce((sum, message) => sum + (message.content || '').length, 0);
+  const expectedTrimmedAverage = roundToTenth(trimmedTotal / whitespaceMessages.length);
+  const expectedRawAverage = roundToTenth(rawTotal / whitespaceMessages.length);
+
+  if (expectedTrimmedAverage === expectedRawAverage) {
+    throw new Error('Whitespace fixture should produce different trimmed and raw averages.');
+  }
+
+  const reportedAverageLength = whitespaceStats.averageMessageLength.Trimmer;
+  if (reportedAverageLength !== expectedTrimmedAverage) {
+    throw new Error(`Average message length should ignore surrounding whitespace. Expected ${expectedTrimmedAverage}, got ${reportedAverageLength}.`);
+  }
+
   for (const participant of stats.participants) {
     const before = stats.wordCountByParticipant[participant] || 0;
     const after = statsWithMedia.wordCountByParticipant[participant] || 0;
