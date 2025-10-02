@@ -29,6 +29,7 @@ const participantWordSelect = document.getElementById('participant-word-select')
 const participantWordSelector = document.getElementById('participant-word-selector');
 const participantWordSummary = document.getElementById('participant-word-summary');
 const participantTopWordsList = document.getElementById('participant-top-words');
+const participantDistinctiveWordsList = document.getElementById('participant-distinctive-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
 const responseTimesList = document.getElementById('response-times');
@@ -472,6 +473,8 @@ function updateCharts(currentStats) {
 }
 
 function updateTopList(container, items, formatter, emptyMessage = 'No data yet') {
+  if (!container) return;
+
   if (!items.length) {
     container.innerHTML = `<li>${emptyMessage}</li>`;
     return;
@@ -530,6 +533,7 @@ function renderParticipantWordBreakdown(currentStats) {
   if (!participantWordSelect || !participantTopWordsList) return;
 
   const participants = currentStats.participants || [];
+  const hasComparison = participants.length > 1;
   participantWordSelect.innerHTML = '';
   if (participantWordSelector) {
     if (typeof participantWordSelector.replaceChildren === 'function') {
@@ -546,6 +550,9 @@ function renderParticipantWordBreakdown(currentStats) {
     participantWordSelect.appendChild(placeholder);
     participantWordSelect.disabled = true;
     participantTopWordsList.innerHTML = '<li>No participants yet</li>';
+    if (participantDistinctiveWordsList) {
+      participantDistinctiveWordsList.innerHTML = '<li>No participants yet</li>';
+    }
     selectedParticipantForWords = null;
     if (participantWordSummary) {
       participantWordSummary.textContent = 'No participants yet';
@@ -616,6 +623,38 @@ function renderParticipantWordBreakdown(currentStats) {
     ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`,
     'No words yet'
   );
+
+  if (participantDistinctiveWordsList) {
+    const distinctiveEntries = hasComparison
+      ? currentStats.distinctiveWordsByParticipant?.[nextSelection] || []
+      : [];
+    const ratioFormatter = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+    const percentFormatter = new Intl.NumberFormat(undefined, {
+      style: 'percent',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1
+    });
+
+    updateTopList(
+      participantDistinctiveWordsList,
+      distinctiveEntries,
+      (entry) => {
+        if (!entry) return '<span>—</span><span>—</span>';
+        const word = escapeHtml(entry.word);
+        const shareLabel = entry.selfShare > 0
+          ? percentFormatter.format(entry.selfShare)
+          : '0%';
+        const ratioLabel = entry.exclusive || !Number.isFinite(entry.lift)
+          ? `unique · ${shareLabel}`
+          : `${entry.lift >= 10 ? Math.round(entry.lift) : ratioFormatter.format(entry.lift)}× more · ${shareLabel}`;
+        return `<span>${word}</span><span>${escapeHtml(ratioLabel)}</span>`;
+      },
+      hasComparison ? 'Not enough contrast yet' : 'Need at least two participants'
+    );
+  }
 }
 
 function focusParticipantWordPill(participant) {
@@ -627,12 +666,6 @@ function focusParticipantWordPill(participant) {
 
 function selectParticipantForWords(participant, { focus = false } = {}) {
   if (!participant || !stats) return;
-  if (participant === selectedParticipantForWords) {
-    if (focus) {
-      setTimeout(() => focusParticipantWordPill(participant), 0);
-    }
-    return;
-  }
   selectedParticipantForWords = participant;
   if (participantWordSelect) {
     participantWordSelect.value = participant;
@@ -794,6 +827,32 @@ function buildInsights(currentStats) {
   updateResponseTimesList(currentStats);
   updateResponseCutoffNote(currentStats);
   const insights = [];
+
+  if ((currentStats.participants?.length || 0) > 1) {
+    const ratioFormatter = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+
+    const distinctiveHighlights = currentStats.participants
+      .map((participant) => {
+        const entries = currentStats.distinctiveWordsByParticipant?.[participant];
+        if (!entries?.length) return null;
+        const descriptions = entries.slice(0, 3).map((entry) => {
+          const word = `<code>${escapeHtml(entry.word)}</code>`;
+          const label = entry.exclusive || !Number.isFinite(entry.lift)
+            ? 'unique'
+            : `${entry.lift >= 10 ? Math.round(entry.lift) : ratioFormatter.format(entry.lift)}×`;
+          return `${word} (${escapeHtml(label)})`;
+        });
+        if (!descriptions.length) return null;
+        return `${escapeHtml(participant)} leans on ${descriptions.join(', ')} compared to others.`;
+      })
+      .filter(Boolean)
+      .slice(0, 2);
+
+    insights.push(...distinctiveHighlights);
+  }
   if (currentStats.busiestDay) {
     insights.push(`Most active day: <strong>${currentStats.busiestDay.date}</strong> with ${currentStats.busiestDay.count} messages.`);
   }

@@ -307,6 +307,7 @@ export function computeStatistics(messages, options = {}) {
       topWords: [],
       topEmojis: [],
       topWordsByParticipant: {},
+      distinctiveWordsByParticipant: {},
       averageMessageLength: {},
       busiestDay: null,
       busiestHour: null,
@@ -324,6 +325,7 @@ export function computeStatistics(messages, options = {}) {
   const wordCountByParticipant = {};
   const totalWordsByParticipant = {};
   const wordFrequencyByParticipant = {};
+  const globalWordFrequency = {};
   const longestMessageByParticipant = {};
   const messagesByDate = new Map();
   const messagesByHour = new Array(24).fill(0);
@@ -390,6 +392,7 @@ export function computeStatistics(messages, options = {}) {
       const frequency = wordFrequencyByParticipant[author];
       for (const word of wordList) {
         frequency[word] = (frequency[word] || 0) + 1;
+        globalWordFrequency[word] = (globalWordFrequency[word] || 0) + 1;
       }
       const emojis = extractEmojis(message.content);
       for (const emoji of emojis) {
@@ -477,6 +480,76 @@ export function computeStatistics(messages, options = {}) {
     topWordsByParticipant[participant] = entries.slice(0, 10);
   }
 
+  const vocabularySize = Object.keys(globalWordFrequency).length;
+  const smoothing = 0.5;
+  const smoothingDenominator = smoothing * Math.max(1, vocabularySize);
+  const totalWordVolume = participants.reduce((acc, participant) => acc + (wordCountByParticipant[participant] || 0), 0);
+  const hasComparison = participants.length > 1 && totalWordVolume > 0;
+  const distinctiveWordsByParticipant = {};
+
+  for (const participant of participants) {
+    if (!hasComparison) {
+      distinctiveWordsByParticipant[participant] = [];
+      continue;
+    }
+
+    const participantTotal = wordCountByParticipant[participant] || 0;
+    const othersTotal = Math.max(0, totalWordVolume - participantTotal);
+
+    if (participantTotal === 0) {
+      distinctiveWordsByParticipant[participant] = [];
+      continue;
+    }
+
+    const participantFrequency = wordFrequencyByParticipant[participant] || {};
+    const entries = Object.entries(participantFrequency).map(([word, count]) => {
+      const overallCount = globalWordFrequency[word] || 0;
+      const othersCount = Math.max(0, overallCount - count);
+      const selfProb = (count + smoothing) / (participantTotal + smoothingDenominator);
+      const othersProb = othersTotal > 0
+        ? (othersCount + smoothing) / (othersTotal + smoothingDenominator)
+        : 0;
+      const lift = othersProb > 0 ? selfProb / othersProb : Number.POSITIVE_INFINITY;
+      const delta = selfProb - othersProb;
+      const selfShare = participantTotal > 0 ? count / participantTotal : 0;
+      const othersShare = othersTotal > 0 ? othersCount / othersTotal : 0;
+      return {
+        word,
+        count,
+        lift,
+        delta,
+        exclusive: othersCount === 0,
+        selfShare,
+        othersShare
+      };
+    }).filter((entry) => entry.count > 0);
+
+    entries.sort((a, b) => {
+      const aLift = Number.isFinite(a.lift) ? a.lift : Number.POSITIVE_INFINITY;
+      const bLift = Number.isFinite(b.lift) ? b.lift : Number.POSITIVE_INFINITY;
+
+      if (bLift !== aLift) {
+        return bLift - aLift;
+      }
+      if (b.delta !== a.delta) {
+        return b.delta - a.delta;
+      }
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      return a.word.localeCompare(b.word);
+    });
+
+    let filtered = entries.filter((entry) => entry.exclusive || (entry.count >= 2 && entry.lift >= 1.5));
+    if (!filtered.length) {
+      filtered = entries.slice(0, 5);
+    } else {
+      filtered = filtered.slice(0, 5);
+    }
+
+    distinctiveWordsByParticipant[participant] = filtered.map((entry) => ({ ...entry }));
+  }
+
   const overallAverageWordsPerMessage = totalMessages ? round(totalWords / totalMessages, 1) : 0;
 
   const [firstMessageDate] = sortedMessages;
@@ -523,6 +596,7 @@ export function computeStatistics(messages, options = {}) {
     topWords,
     topEmojis,
     topWordsByParticipant,
+    distinctiveWordsByParticipant,
     averageMessageLength,
     busiestDay,
     busiestHour,
@@ -673,6 +747,23 @@ export function generateMarkdownSummary({
         ? `${longest.wordCount} ${longest.wordCount === 1 ? 'word' : 'words'}`
         : `${longest.charCount} chars`;
       bits.push(`longest message ${descriptor} (${formatLocalDateTime(longest.timestamp)})`);
+    }
+    const distinctive = stats.distinctiveWordsByParticipant?.[participant];
+    if (distinctive?.length) {
+      const highlights = distinctive.slice(0, 3).map((entry) => {
+        if (!entry?.word) return null;
+        const safeWord = entry.word.replace(/`/g, '\\`');
+        if (entry.exclusive || !Number.isFinite(entry.lift)) {
+          return `\`${safeWord}\` (unique)`;
+        }
+        const formattedLift = entry.lift >= 10
+          ? `${Math.round(entry.lift)}×`
+          : `${entry.lift.toFixed(1)}×`;
+        return `\`${safeWord}\` (${formattedLift})`;
+      }).filter(Boolean);
+      if (highlights.length) {
+        bits.push(`distinctive vocab ${highlights.join(', ')}`);
+      }
     }
     lines.push(`- ${bits.join(' · ')}`);
   }
