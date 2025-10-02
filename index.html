@@ -95,11 +95,13 @@
         <div class="participant-word-breakdown">
           <h3>Words by participant</h3>
           <label class="participant-word-label" for="participant-word-select">
-            <span>Select participant</span>
-            <select id="participant-word-select" disabled>
+            <span id="participant-word-label">Select participant</span>
+            <select id="participant-word-select" class="visually-hidden" aria-labelledby="participant-word-label" disabled>
               <option value="">No participants yet</option>
             </select>
           </label>
+          <div id="participant-word-selector" class="participant-word-selector" role="radiogroup" aria-labelledby="participant-word-label"></div>
+          <p id="participant-word-summary" class="participant-word-summary" aria-live="polite">No participants yet</p>
           <ol id="participant-top-words" class="pill-list"></ol>
         </div>
         <div>

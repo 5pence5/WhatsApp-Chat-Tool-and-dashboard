@@ -26,6 +26,8 @@ const resetRangeButton = document.getElementById('reset-range');
 const summaryCardsContainer = document.getElementById('summary-cards');
 const topWordsList = document.getElementById('top-words');
 const participantWordSelect = document.getElementById('participant-word-select');
+const participantWordSelector = document.getElementById('participant-word-selector');
+const participantWordSummary = document.getElementById('participant-word-summary');
 const participantTopWordsList = document.getElementById('participant-top-words');
 const topEmojisList = document.getElementById('top-emojis');
 const insightList = document.getElementById('insight-list');
@@ -111,6 +113,16 @@ function escapeHtml(text) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function escapeSelector(value) {
+  if (value === null || typeof value === 'undefined') {
+    return '';
+  }
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(String(value));
+  }
+  return String(value).replace(/([ !"#$%&'()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
 }
 
 function formatSnippet(text) {
@@ -519,6 +531,13 @@ function renderParticipantWordBreakdown(currentStats) {
 
   const participants = currentStats.participants || [];
   participantWordSelect.innerHTML = '';
+  if (participantWordSelector) {
+    if (typeof participantWordSelector.replaceChildren === 'function') {
+      participantWordSelector.replaceChildren();
+    } else {
+      participantWordSelector.innerHTML = '';
+    }
+  }
 
   if (!participants.length) {
     const placeholder = document.createElement('option');
@@ -528,6 +547,9 @@ function renderParticipantWordBreakdown(currentStats) {
     participantWordSelect.disabled = true;
     participantTopWordsList.innerHTML = '<li>No participants yet</li>';
     selectedParticipantForWords = null;
+    if (participantWordSummary) {
+      participantWordSummary.textContent = 'No participants yet';
+    }
     return;
   }
 
@@ -544,8 +566,48 @@ function renderParticipantWordBreakdown(currentStats) {
     participantWordSelect.appendChild(option);
   });
 
+  if (participantWordSelector) {
+    participants.forEach((participant) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'participant-word-pill';
+      button.dataset.participant = participant;
+      button.setAttribute('role', 'radio');
+      const isActive = participant === nextSelection;
+      button.setAttribute('aria-checked', String(isActive));
+      button.tabIndex = isActive ? 0 : -1;
+      button.textContent = participant;
+      participantWordSelector.appendChild(button);
+    });
+  }
+
   participantWordSelect.disabled = false;
   participantWordSelect.value = nextSelection;
+
+  if (participantWordSummary) {
+    const messageCount = currentStats.messageCountByParticipant?.[nextSelection] || 0;
+    const totalWords = currentStats.wordCountByParticipant?.[nextSelection] || 0;
+    const averageWords = currentStats.averageWordsPerMessage?.[nextSelection] || 0;
+    const numberFormatter = new Intl.NumberFormat();
+    const averageFormatter = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+    const segments = [];
+
+    if (messageCount > 0) {
+      segments.push(`${averageFormatter.format(averageWords)} words/msg`);
+      segments.push(`${numberFormatter.format(messageCount)} ${messageCount === 1 ? 'message' : 'messages'}`);
+    }
+
+    if (totalWords > 0) {
+      segments.push(`${numberFormatter.format(totalWords)} words total`);
+    }
+
+    participantWordSummary.textContent = segments.length
+      ? segments.join(' · ')
+      : 'No participant messages yet';
+  }
 
   const entries = currentStats.topWordsByParticipant?.[nextSelection] || [];
   updateTopList(
@@ -554,6 +616,31 @@ function renderParticipantWordBreakdown(currentStats) {
     ([word, count]) => `<span>${escapeHtml(word)}</span><span>${count}</span>`,
     'No words yet'
   );
+}
+
+function focusParticipantWordPill(participant) {
+  if (!participantWordSelector || !participant) return;
+  const safeSelector = `[data-participant="${escapeSelector(participant)}"]`;
+  const button = participantWordSelector.querySelector(safeSelector);
+  button?.focus();
+}
+
+function selectParticipantForWords(participant, { focus = false } = {}) {
+  if (!participant || !stats) return;
+  if (participant === selectedParticipantForWords) {
+    if (focus) {
+      setTimeout(() => focusParticipantWordPill(participant), 0);
+    }
+    return;
+  }
+  selectedParticipantForWords = participant;
+  if (participantWordSelect) {
+    participantWordSelect.value = participant;
+  }
+  renderParticipantWordBreakdown(stats);
+  if (focus) {
+    setTimeout(() => focusParticipantWordPill(participant), 0);
+  }
 }
 
 function renderStats(currentStats) {
@@ -907,9 +994,58 @@ resetRangeButton.addEventListener('click', () => {
 });
 
 participantWordSelect?.addEventListener('change', (event) => {
-  selectedParticipantForWords = event.target.value || null;
-  if (stats) {
-    renderParticipantWordBreakdown(stats);
+  const value = event.target.value || null;
+  if (value) {
+    selectParticipantForWords(value);
+  }
+});
+
+participantWordSelector?.addEventListener('click', (event) => {
+  const target = event.target.closest('.participant-word-pill');
+  if (!target || !participantWordSelector.contains(target)) return;
+  const participant = target.dataset.participant;
+  if (participant) {
+    selectParticipantForWords(participant, { focus: true });
+  }
+});
+
+participantWordSelector?.addEventListener('keydown', (event) => {
+  if (!stats) return;
+  const buttons = Array.from(participantWordSelector.querySelectorAll('.participant-word-pill'));
+  if (!buttons.length) return;
+  const key = event.key;
+
+  const getIndex = () => buttons.findIndex((button) => button.dataset.participant === selectedParticipantForWords);
+  const moveToIndex = (index) => {
+    if (index < 0 || index >= buttons.length) return;
+    const participant = buttons[index].dataset.participant;
+    if (participant) {
+      selectParticipantForWords(participant, { focus: true });
+    }
+  };
+
+  if (key === 'ArrowRight' || key === 'ArrowDown') {
+    event.preventDefault();
+    const index = getIndex();
+    const nextIndex = index === -1 ? 0 : (index + 1) % buttons.length;
+    moveToIndex(nextIndex);
+  } else if (key === 'ArrowLeft' || key === 'ArrowUp') {
+    event.preventDefault();
+    const index = getIndex();
+    const nextIndex = index === -1 ? buttons.length - 1 : (index - 1 + buttons.length) % buttons.length;
+    moveToIndex(nextIndex);
+  } else if (key === 'Home') {
+    event.preventDefault();
+    moveToIndex(0);
+  } else if (key === 'End') {
+    event.preventDefault();
+    moveToIndex(buttons.length - 1);
+  } else if (key === ' ' || key === 'Enter') {
+    const target = event.target.closest('.participant-word-pill');
+    if (target?.dataset.participant) {
+      event.preventDefault();
+      selectParticipantForWords(target.dataset.participant, { focus: true });
+    }
   }
 });
 
