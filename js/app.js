@@ -634,20 +634,33 @@ function updateResponseTimesList(currentStats) {
       `;
       }
 
-      const segments = [];
+      const metrics = [];
       if (average !== null) {
-        segments.push(`avg ${formatter.format(average)} min`);
+        metrics.push(`
+          <span class="response-metric" data-kind="avg">
+            <span class="metric-label">avg</span>
+            <span class="metric-value">${formatter.format(average)} min</span>
+          </span>
+        `);
       }
       if (median !== null) {
-        segments.push(`median ${formatter.format(median)} min`);
+        metrics.push(`
+          <span class="response-metric" data-kind="median">
+            <span class="metric-label">median</span>
+            <span class="metric-value">${formatter.format(median)} min</span>
+          </span>
+        `);
       }
-      const sampleSuffix = samples > 0 ? ` (${samples} gap${samples === 1 ? '' : 's'})` : '';
-      const label = `${segments.join(' · ')}${sampleSuffix}`;
+
+      const metricsHtml = metrics.map((metric) => metric.trim()).join('');
+      const sampleLabel = samples > 0
+        ? `<span class="response-sample">${samples} gap${samples === 1 ? '' : 's'}</span>`
+        : '';
 
       return `
         <li>
           <span class="response-name">${participant}</span>
-          <span class="response-time-value">${label}</span>
+          <span class="response-time-value">${metricsHtml}${sampleLabel}</span>
         </li>
       `;
     })
