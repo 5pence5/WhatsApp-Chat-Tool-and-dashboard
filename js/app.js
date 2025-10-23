@@ -15,6 +15,7 @@ let hourlyChart = null;
 let wordsChart = null;
 let activeDateFormat = 'DMY';
 let rawChatText = '';
+let selectedParticipants = [];
 
 const fileInput = document.getElementById('chat-file');
 const fileHelper = document.getElementById('file-helper');
@@ -43,6 +44,9 @@ const mdTitleInput = document.getElementById('md-title');
 const sampleCountInput = document.getElementById('sample-count');
 const generateMdButton = document.getElementById('generate-md');
 const mdPreview = document.getElementById('md-preview');
+const themeToggle = document.getElementById('theme-toggle');
+const participantFilter = document.getElementById('participant-filter');
+const exportCsvButton = document.getElementById('export-csv');
 
 let selectedParticipantForWords = null;
 let ignoreCommonTopWords = false;
@@ -51,6 +55,55 @@ dateFormatChooser.id = 'date-format-chooser';
 dateFormatChooser.className = 'date-format-chooser';
 dateFormatChooser.hidden = true;
 loadStatus.insertAdjacentElement('afterend', dateFormatChooser);
+
+// Theme management
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+}
+
+// Loading spinner
+function showLoading(message = 'Loading...') {
+  loadStatus.innerHTML = `<span class="loading-spinner"></span><span>${message}</span>`;
+  loadStatus.classList.remove('error');
+}
+
+function hideLoading() {
+  const spinner = loadStatus.querySelector('.loading-spinner');
+  if (spinner) {
+    spinner.remove();
+  }
+}
+
+// Data persistence
+function saveFiltersToStorage() {
+  const filters = {
+    startDate: startDateInput.value,
+    endDate: endDateInput.value,
+    selectedParticipants: selectedParticipants
+  };
+  localStorage.setItem('chatFilters', JSON.stringify(filters));
+}
+
+function loadFiltersFromStorage() {
+  try {
+    const saved = localStorage.getItem('chatFilters');
+    if (saved) {
+      const filters = JSON.parse(saved);
+      return filters;
+    }
+  } catch (e) {
+    console.error('Error loading filters:', e);
+  }
+  return null;
+}
 
 async function loadChatFile(file) {
   if (!file) return null;
@@ -266,9 +319,14 @@ function updateSummaryCards(currentStats) {
     .join('');
 }
 
-function renderChart({ elementId, labels, data, label, color, chartRef, datasets, type = 'bar', options = {} }) {
+function renderChart({ elementId, labels, data, label, color, chartRef, datasets, type = 'bar', options = {}, ariaLabel = '' }) {
   const ctx = document.getElementById(elementId);
   if (!ctx) return null;
+
+  // Update ARIA label for better accessibility
+  if (ariaLabel) {
+    ctx.setAttribute('aria-label', ariaLabel);
+  }
 
   if (chartRef) {
     chartRef.destroy();
@@ -374,6 +432,11 @@ function updateCharts(currentStats) {
   const participantLabels = currentStats.participants;
   const participantData = participantLabels.map((participant) => currentStats.messageCountByParticipant[participant]);
 
+  const totalMessages = participantData.reduce((a, b) => a + b, 0);
+  const participantSummary = participantLabels.map((p, i) =>
+    `${p}: ${participantData[i]} messages`
+  ).join(', ');
+
   participantsChart = renderChart({
     elementId: 'participants-chart',
     labels: participantLabels,
@@ -385,11 +448,16 @@ function updateCharts(currentStats) {
         borderRadius: 8
       }
     ],
-    chartRef: participantsChart
+    chartRef: participantsChart,
+    ariaLabel: `Messages per participant chart showing ${totalMessages} total messages: ${participantSummary}`
   });
 
   const hourlyLabels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`);
   const hourlyData = currentStats.messagesByHour;
+
+  const busiestHour = hourlyData.indexOf(Math.max(...hourlyData));
+  const busiestHourLabel = hourlyLabels[busiestHour];
+  const busiestHourCount = hourlyData[busiestHour];
 
   hourlyChart = renderChart({
     elementId: 'hourly-chart',
@@ -402,11 +470,16 @@ function updateCharts(currentStats) {
         borderRadius: 8
       }
     ],
-    chartRef: hourlyChart
+    chartRef: hourlyChart,
+    ariaLabel: `Hourly message distribution chart. Most active hour is ${busiestHourLabel} with ${busiestHourCount} messages.`
   });
 
   const totalWordData = participantLabels.map((participant) => currentStats.wordCountByParticipant[participant] || 0);
   const averageWordData = participantLabels.map((participant) => currentStats.averageWordsPerMessage?.[participant] || 0);
+
+  const wordSummary = participantLabels.map((p, i) =>
+    `${p}: ${totalWordData[i]} total words, average ${averageWordData[i].toFixed(1)} per message`
+  ).join('; ');
 
   wordsChart = renderChart({
     elementId: 'words-chart',
@@ -437,6 +510,7 @@ function updateCharts(currentStats) {
       }
     ],
     chartRef: wordsChart,
+    ariaLabel: `Word contributions chart showing total words and average words per message: ${wordSummary}`,
     options: {
       scales: {
         y: {
@@ -888,10 +962,12 @@ function enableControls(enabled) {
     applyRangeButton,
     resetRangeButton,
     generateMdButton,
+    exportCsvButton,
     responseGapInput,
     responseOvernightToggle,
     responseOvernightMinutesInput,
-    topWordsIgnoreCommonToggle
+    topWordsIgnoreCommonToggle,
+    participantFilter
   ].forEach((el) => {
     if (el) {
       el.disabled = !enabled;
@@ -918,16 +994,97 @@ function applyFilters() {
   const start = startDateInput.value || null;
   const end = endDateInput.value || null;
 
-  filteredMessages = filterMessagesByDate(allMessages, start, end);
+  // First filter by date
+  let filtered = filterMessagesByDate(allMessages, start, end);
+
+  // Then filter by selected participants
+  if (selectedParticipants.length > 0) {
+    filtered = filtered.filter(msg => selectedParticipants.includes(msg.participant));
+  }
+
+  filteredMessages = filtered;
   refreshStats();
+  saveFiltersToStorage();
 }
 
 function resetFilters() {
   if (!fullStats) return;
   startDateInput.value = formatDateForInput(fullStats.firstMessageDate);
   endDateInput.value = formatDateForInput(fullStats.lastMessageDate);
+
+  // Reset participant filter
+  selectedParticipants = [];
+  if (participantFilter) {
+    Array.from(participantFilter.options).forEach(opt => {
+      opt.selected = false;
+    });
+  }
+
   filteredMessages = [...allMessages];
   refreshStats();
+  saveFiltersToStorage();
+}
+
+// Populate participant filter
+function populateParticipantFilter() {
+  if (!participantFilter || !fullStats) return;
+
+  participantFilter.innerHTML = '';
+
+  fullStats.participants.forEach(participant => {
+    const option = document.createElement('option');
+    option.value = participant;
+    option.textContent = participant;
+    participantFilter.appendChild(option);
+  });
+
+  // Restore saved selection
+  const savedFilters = loadFiltersFromStorage();
+  if (savedFilters && savedFilters.selectedParticipants) {
+    selectedParticipants = savedFilters.selectedParticipants.filter(p =>
+      fullStats.participants.includes(p)
+    );
+    selectedParticipants.forEach(p => {
+      const option = Array.from(participantFilter.options).find(o => o.value === p);
+      if (option) option.selected = true;
+    });
+  }
+}
+
+// CSV Export
+function exportToCSV() {
+  if (!stats || !filteredMessages.length) return;
+
+  const rows = [];
+
+  // Header
+  rows.push(['Timestamp', 'Participant', 'Message', 'Word Count', 'Media'].join(','));
+
+  // Data rows
+  filteredMessages.forEach(msg => {
+    const timestamp = msg.timestamp instanceof Date
+      ? msg.timestamp.toISOString()
+      : new Date(msg.timestamp).toISOString();
+    const participant = `"${(msg.participant || '').replace(/"/g, '""')}"`;
+    const content = `"${(msg.content || '').replace(/"/g, '""')}"`;
+    const wordCount = msg.wordCount || 0;
+    const isMedia = msg.isMedia ? 'Yes' : 'No';
+
+    rows.push([timestamp, participant, content, wordCount, isMedia].join(','));
+  });
+
+  const csvContent = rows.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `whatsapp-chat-export-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  loadStatus.textContent = 'CSV exported successfully!';
 }
 
 function processParsedChat(parseResult, options = {}) {
@@ -971,10 +1128,23 @@ function processParsedChat(parseResult, options = {}) {
   }
 
   enableControls(true);
-  refreshStats();
+  populateParticipantFilter();
+
+  // Apply saved filters if available
+  const savedFilters = loadFiltersFromStorage();
+  if (savedFilters && preserveFilters) {
+    if (savedFilters.selectedParticipants && savedFilters.selectedParticipants.length > 0) {
+      applyFilters();
+    } else {
+      refreshStats();
+    }
+  } else {
+    refreshStats();
+  }
 
   renderDateFormatChooser(parseResult);
   loadStatus.classList.remove('error');
+  hideLoading();
   updateLoadSuccessMessage();
 }
 
@@ -1033,15 +1203,28 @@ fileInput.addEventListener('change', async (event) => {
 
   fileHelper.textContent = file.name;
   clearStatus();
-  loadStatus.textContent = 'Parsing chat…';
+  showLoading('Parsing chat…');
 
   try {
     rawChatText = await loadChatFile(file);
-    const parseResult = parseChat(rawChatText);
-    processParsedChat(parseResult);
+    showLoading('Processing messages…');
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        const parseResult = parseChat(rawChatText);
+        processParsedChat(parseResult);
+      } catch (error) {
+        console.error(error);
+        hideLoading();
+        showError(error.message || 'Something went wrong while parsing the chat.');
+        enableControls(false);
+      }
+    }, 50);
   } catch (error) {
     console.error(error);
-    showError(error.message || 'Something went wrong while parsing the chat.');
+    hideLoading();
+    showError(error.message || 'Something went wrong while loading the file.');
     enableControls(false);
   }
 });
@@ -1122,6 +1305,19 @@ generateMdButton.addEventListener('click', () => {
   loadStatus.textContent = 'Markdown summary generated!';
 });
 
+// Theme toggle
+themeToggle?.addEventListener('click', toggleTheme);
+
+// Participant filter
+participantFilter?.addEventListener('change', () => {
+  selectedParticipants = Array.from(participantFilter.selectedOptions).map(opt => opt.value);
+});
+
+// CSV Export
+exportCsvButton?.addEventListener('click', () => {
+  exportToCSV();
+});
+
 responseGapInput?.addEventListener('input', handleResponseSettingsChange);
 responseOvernightToggle?.addEventListener('change', handleResponseSettingsChange);
 responseOvernightMinutesInput?.addEventListener('input', handleResponseSettingsChange);
@@ -1139,6 +1335,7 @@ document.addEventListener('drop', async (event) => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   enableControls(false);
   mdPreview.value = '';
   ignoreCommonTopWords = false;

@@ -18,6 +18,22 @@
       <h1>WhatsApp Chat Insights Dashboard</h1>
       <p>Upload your exported WhatsApp chat (.zip or .txt) to explore rich analytics and craft shareable summaries.</p>
     </div>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme" title="Switch between light and dark mode">
+      <svg class="theme-icon sun-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+      </svg>
+      <svg class="theme-icon moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    </button>
   </header>
 
   <main class="app-main">
@@ -37,7 +53,7 @@
     <section class="card controls-card" aria-labelledby="filters-title">
       <div class="controls-header">
         <h2 id="filters-title">Filter &amp; focus</h2>
-        <p>Choose a time window to drill into specific periods of the conversation.</p>
+        <p>Choose a time window and participants to analyze specific periods of the conversation.</p>
       </div>
       <div class="controls-grid">
         <label>
@@ -48,7 +64,13 @@
           <span>End date</span>
           <input type="date" id="end-date" disabled />
         </label>
-        <button id="apply-range" disabled>Apply date range</button>
+        <label class="participant-filter-label">
+          <span>Participants <span class="tooltip-trigger" data-tooltip="Select specific participants to include in the analysis" title="Filter by specific participants">ⓘ</span></span>
+          <select id="participant-filter" multiple disabled size="3">
+            <option value="">All participants</option>
+          </select>
+        </label>
+        <button id="apply-range" disabled>Apply filters</button>
         <button id="reset-range" disabled class="subtle">Reset</button>
       </div>
     </section>
@@ -119,7 +141,7 @@
           <ul id="longest-messages" class="longest-message-list" aria-live="polite"></ul>
         </div>
         <div>
-        <h3>Reply time stats (avg &amp; median)</h3>
+        <h3>Reply time stats (avg &amp; median) <span class="tooltip-trigger" data-tooltip="Average and median response times between different participants. Configure the settings below to exclude very long gaps." title="Learn more about reply time stats">ⓘ</span></h3>
           <div class="response-controls">
             <label class="response-field">
               <span>Ignore gaps longer than</span>
@@ -165,6 +187,7 @@
           <input type="number" id="sample-count" min="0" max="10" value="3" />
         </label>
         <button id="generate-md" disabled>Download Markdown</button>
+        <button id="export-csv" disabled>Export CSV</button>
       </div>
       <textarea id="md-preview" aria-label="Markdown preview" readonly placeholder="Markdown summary will appear here after generation."></textarea>
     </section>
